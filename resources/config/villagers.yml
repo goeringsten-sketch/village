@@ -1,0 +1,163 @@
+# Villager settings split from config.yml
+
+villagers:
+  base-max: 5
+  # Moegliche Activity-Typen fuer activity-sequence:
+  # TRAVEL_TO, WORK, PREPARE, GATHER, SLEEP, IDLE, TRADE
+  # location-key verweist auf buildings.yml -> buildings.types.<type>.locations.<key>
+  # Beispiel-Farm: workstation, workstation_compost, workstation_mill, storage
+  # Berufe
+  professions:
+    farmer:
+      display-name: "&aBauer"
+      icon: WHEAT_SEEDS
+      produces:
+        - WHEAT
+        - CARROT
+        - POTATO
+      production-interval-seconds: 300
+      required-level: 1
+      skin-name: "farmer"
+      activity-sequence:
+        wake-up:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 200
+          interruptable: true
+          description: "Geht zur Farm"
+        work-morning:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1200
+          interruptable: false
+          description: "Arbeitet auf der Farm"
+        lunch-break:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 600
+          interruptable: true
+          description: "Mittagspause"
+        work-afternoon:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1200
+          interruptable: false
+          description: "Arbeitet weiter"
+        go-home:
+          type: "SLEEP"
+          location-key: ""
+          duration-ticks: 200
+          interruptable: true
+          description: "Geht schlafen"
+    miner:
+      display-name: "&aBergarbeiter"
+      icon: IRON_PICKAXE
+      produces:
+        - COBBLESTONE
+        - IRON_ORE
+        - COAL
+      production-interval-seconds: 600
+      required-level: 3
+      skin-name: "miner"
+      activity-sequence:
+        prepare:
+          type: "PREPARE"
+          location-key: "storage"
+          duration-ticks: 200
+          interruptable: true
+          description: "Bereitet Werkzeuge vor"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 2400
+          interruptable: false
+          description: "Abbaut Erz"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Kurze Pause"
+    lumberjack:
+      display-name: "&aHolzfaeller"
+      icon: IRON_AXE
+      produces:
+        - OAK_LOG
+        - BIRCH_LOG
+        - SPRUCE_LOG
+      production-interval-seconds: 400
+      required-level: 2
+      skin-name: "lumberjack"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 300
+          interruptable: true
+          description: "Geht in den Wald"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Faellt Baeume"
+        return:
+          type: "TRAVEL_TO"
+          location-key: "storage"
+          duration-ticks: 300
+          interruptable: true
+          description: "Bringt Holz zurueck"
+    blacksmith:
+      display-name: "&aSchmied"
+      icon: ANVIL
+      produces:
+        - IRON_INGOT
+        - GOLD_INGOT
+      production-interval-seconds: 900
+      required-level: 5
+    guard:
+      display-name: "&aWache"
+      icon: IRON_SWORD
+      produces: []
+      production-interval-seconds: 0
+      required-level: 4
+    merchant:
+      display-name: "&aHaendler"
+      icon: EMERALD
+      produces: []
+      production-interval-seconds: 0
+      required-level: 6
+    scholar:
+      display-name: "&aGelehrter"
+      icon: BOOK
+      produces: []
+      production-interval-seconds: 0
+      required-level: 8
+    baker:
+      display-name: "&aBaecker"
+      icon: BREAD
+      produces:
+        - BREAD
+        - CAKE
+        - COOKIE
+      production-interval-seconds: 450
+      required-level: 3
+  # Tagesablauf (Ticks)
+  schedule:
+    wake-up: 0       # 06:00
+    work-start: 2000  # 08:00
+    lunch: 6000       # 12:00
+    work-end: 10000   # 16:00
+    sleep: 13000      # 19:00
+  # Beduerfnisse
+  needs:
+    hunger:
+      decay-per-minute: 2.0
+      critical-threshold: 20.0
+    happiness:
+      decay-per-minute: 1.0
+      critical-threshold: 30.0
+  # Skill-Baeume
+  skill-tree:
+    max-skill-level: 10
+    xp-per-level: 100

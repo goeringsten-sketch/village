@@ -1,0 +1,54 @@
+# ============================================================
+# Village Plugin - Konfiguration
+# ============================================================
+
+# --- Allgemein ---
+storage:
+  type: YAML  # YAML oder MYSQL (vorbereitet)
+
+# --- Nachrichten ---
+messages:
+  prefix: "&8[&6Dorf&8] &7"
+  no-permission: "&cDu hast keine Berechtigung."
+  player-only: "&cNur Spieler koennen diesen Befehl verwenden."
+  village-not-found: "&cDorf nicht gefunden."
+  already-in-village: "&cDu bist bereits in einem Dorf."
+  village-created: "&aDorf &e%name% &awurde gegruendet!"
+  village-deleted: "&cDorf &e%name% &cwurde geloescht."
+  village-joined: "&aDu bist dem Dorf &e%name% &abeigetreten."
+  village-left: "&eDu hast das Dorf &e%name% &everlassen."
+  join-request-created: "&aDeine Beitrittsanfrage fuer &e%name% &awurde gesendet."
+  join-request-already-exists: "&eDu hast bereits eine offene Beitrittsanfrage fuer &6%name%&e."
+  join-request-notify: "&e%player% &7moechte dem Dorf &6%name% &7beitreten."
+  join-request-review-clickable: "&7Klicke auf [ANNEHMEN]/[ABLEHNEN] in der Chat-Nachricht."
+  join-request-accepted: "&aDeine Beitrittsanfrage fuer &e%name% &awurde angenommen."
+  join-request-declined: "&cDeine Beitrittsanfrage fuer &e%name% &cwurde abgelehnt."
+  join-request-accepted-admin: "&a%player% &7wurde in das Dorf &e%name% &7aufgenommen."
+  join-request-declined-admin: "&eDie Beitrittsanfrage von &6%player% &efuer &6%name% &ewurde abgelehnt."
+  border-set: "&aGrenze wurde gesetzt!"
+  border-invalid: "&cUngueltige Grenze! An jeder Stelle muss ein %size%x%size% Quadrat platzierbar sein."
+  border-invalid-walk: "&cUngueltige Grenze! Die Grenzziehung konnte nicht abgeschlossen werden (z.B. ungueltiger Verlauf, keine gueltige Verbindung zur bestehenden Grenze oder zu viele Schritte beim Schliessen)."
+  border-preview-start: "&aVorschau der Grenze wird angezeigt..."
+  border-preview-end: "&eVorschau beendet."
+  building-placed: "&aGebaeude &e%building% &awurde platziert."
+  building-completed: "&aGebaeude &e%building% &awurde fertiggestellt!"
+  building-invalid: "&cDas Gebaeude stimmt nicht mit der Vorlage ueberein."
+  building-inside-default-border: "&cGebaeude duerfen nicht nur in der Default-Grenze (ID 0) liegen, wenn es Erweiterungsflaechen gibt."
+  sign-reveal-warning: "&eAm Schild-Ort steht bereits ein Block. Bitte bestaetigen."
+  member-remove-confirm: "&eMitglied wirklich entfernen?"
+  level-up: "&aDorf &e%name% &aist jetzt Level &e%level%&a!"
+  points-gained: "&a+%points% Dorfpunkte"
+  upgrade-purchased: "&aUpgrade &e%upgrade% &awurde freigeschaltet!"
+  upgrade-too-expensive: "&cNicht genuegend Geld oder Punkte."
+  villager-spawned: "&aEin neuer Dorfbewohner ist erschienen!"
+  name-prompt: "&eBitte gib den Namen des Dorfes im Chat ein:"
+  border-walk-start: "&aLaufe die Grenze ab. Nicht diagonal! Rechtsklick zum Bestaetigen."
+  border-walk-stop: "&eGrenzauswahl beendet."
+  coord-prompt-1: "&eGib den ersten Punkt ein (x z):"
+  coord-prompt-2: "&eGib den zweiten Punkt ein (x z):"
+
+
+# Gebäude-Platzierung
+placement:
+  # Zeit in Sekunden, nach der eine ausstehende Gebäude-Platzierung automatisch abbricht
+  timeout-seconds: 60

@@ -1,0 +1,42 @@
+# Player-related settings split from config.yml
+
+# --- Rollen-Upgrades ---
+role-upgrades:
+  role_hr:
+    display-name: "&aHR"
+    icon: WRITABLE_BOOK
+    money-cost:
+      global: 2000.0
+      local: 0.0
+    points-cost: 500
+  role_baumeister:
+    display-name: "&aBaumeister"
+    icon: BRICKS
+    money-cost:
+      global: 2000.0
+      local: 0.0
+    points-cost: 500
+  role_builder:
+    display-name: "&aBuilder"
+    icon: IRON_PICKAXE
+    money-cost:
+      global: 1500.0
+      local: 0.0
+    points-cost: 350
+  role_haendler:
+    display-name: "&aHaendler"
+    icon: EMERALD
+    money-cost:
+      global: 1800.0
+      local: 0.0
+    points-cost: 400
+  role_trainer:
+    display-name: "&aTrainer"
+    icon: EXPERIENCE_BOTTLE
+    money-cost:
+      global: 1800.0
+      local: 0.0
+    points-cost: 400
+
+
+

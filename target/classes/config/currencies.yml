@@ -1,0 +1,91 @@
+# ============================================
+# Village Plugin - Currency Configuration
+# ============================================
+
+# Globale Server-Währung
+global:
+  id: "global"
+  name: "Goldmünze"
+  namePlural: "Goldmünzen"
+  symbol: "⊕"
+  rawSymbol: "[GP]"
+  
+  description: "Server-weite Währung für Handel zwischen Dörfern"
+  
+  # Startwert für neue Spieler
+  startingAmount: 100
+  
+  # Konversions-Rate (Local → Global mit Verlust)
+  conversion:
+    enabled: true
+    rate: 1.25  # 100 Local = 80 Global (20% Makler-Gebühr)
+    minConversionAmount: 10
+
+# Dorf-spezifische Währungen
+villages:
+  # Default-Template für neue Dörfer
+  default:
+    # Muss zu einer existierenden OpenEco currency id passen (keine automatische Erstellung per API)
+    # Platzhalter: {VILLAGE_ID} (normalisierter Dorfname), {VILLAGE_NAME}
+    idTemplate: "{VILLAGE_ID}"
+    nameTemplate: "{VILLAGE_NAME}-Taler"
+    symbol: "Ɖ"
+    rawSymbol: "[DT]"
+    
+    description: "Lokale Währung von {VILLAGE_NAME}"
+    
+    # Startwert wenn "Handel" Upgrade freigegeben wird
+    initialPlayersBalance: 100
+    initialVillagerBalance: 50
+    
+    # Wie viele Item-Slots hat Villager-Lagung?
+    villagerStorageSlots: 27
+    
+    # Wer darf mit dieser Währung handeln?
+    tradersJobs:
+      - "FARMER"
+      - "BLACKSMITH"
+      - "MILLER"
+      - "BAKER"
+      - "FISHER"
+      - "HUNTER"
+    
+    # Villager verdienen Währung durch Arbeit
+    villagerProductionBonus: true
+    earnPerProductionItem: 5
+
+
+# Trading-Regeln
+trading:
+  # Villager-to-Player
+  villagerTrades:
+    enabled: true
+    
+    localCurrencyTrades:
+      enabled: true
+      villagerCanBuy: true
+      villagerCanSell: true
+    
+    globalCurrencyTrades:
+      enabled: true
+      externalPlayersCanBuy: true
+      villagerCanSellToExternals: true
+      villagerCanBuyFromExternals: false
+  
+  # Player-to-Player
+  playerTrades:
+    enabled: true
+    requestTimeout: 86400 # 24 hours in seconds
+    maxPendingRequests: 10
+    maxDistance: 8
+    allowCurrencyExchange: true
+  
+  # Marketplace
+  marketplace:
+    enabled: true
+    playerShopsEnabled: true
+    villagerShopsEnabled: true
+    maxPlayerShops: 5
+    maxVillagerShops: 3
+    shopSetupCost: 25  # in GLOBAL currency
+    commissionPercent: 2.5

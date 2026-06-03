@@ -1,0 +1,6 @@
+debug:
+  enabled: false
+  backup-configs: false
+  building: false
+  chat: false
+  light: false

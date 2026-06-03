@@ -1,0 +1,253 @@
+# ============================================================
+# Quests-System Konfiguration
+# ============================================================
+quests:
+  starter-quest-1:
+    title: "Willkommen!"
+    description: "Sammle 10 Holz für das Dorf."
+    objective: "10x OAK_LOG sammeln"
+    required-village-level: 1
+    min-reputation: -100
+    is-daily: false
+    reward:
+      village-points: 50
+      money:
+        global: 100
+        local: 0.0
+      villager-xp: 10
+      items:
+        EMERALD: 2
+
+  recruitment-quest:
+    title: "Neue Bürger"
+    description: "Rekrutiere einen Dorfbewohner."
+    objective: "Rekrutiere einen Villager"
+    required-village-level: 5
+    min-reputation: 0
+    is-daily: false
+    reward:
+      village-points: 100
+      money:
+        global: 250
+        local: 0.0
+      villager-xp: 20
+      items: {}
+    prerequisites:
+      - starter-quest-1
+
+  trade-quest:
+    title: "Handel lernen"
+    description: "Handelt mit 5 verschiedenen Villagern."
+    objective: "5x mit NPCs handeln"
+    required-village-level: 3
+    min-reputation: -50
+    is-daily: true
+    reward:
+      village-points: 25
+      money:
+        global: 75
+        local: 0.0
+      villager-xp: 5
+      items: {}
+
+  farming-mission:
+    title: "Ernte"
+    description: "Helfe dem Bauern mit der Ernte."
+    objective: "50x Weizen sammeln"
+    required-village-level: 2
+    min-reputation: -30
+    is-daily: true
+    reward:
+      village-points: 30
+      money:
+        global: 50
+        local: 0.0
+      villager-xp: 8
+      items: {}
+
+# ============================================================
+# Skills-System Konfiguration
+# ============================================================
+skills:
+  anbau:
+    max-level: 20
+    base-cost:
+      global: 100
+      local: 0.0
+    description: "Verbessert Anbau-Effizienz"
+  ernte:
+    max-level: 20
+    base-cost:
+      global: 100
+      local: 0.0
+    description: "Erhöht Ernte-Ausbeute"
+  effizienz:
+    max-level: 20
+    base-cost:
+      global: 150
+      local: 0.0
+    description: "Reduziert Bearbeitungszeit"
+  verhandlung:
+    max-level: 15
+    base-cost:
+      global: 200
+      local: 0.0
+    description: "Verbessert NPC-Handel"
+  preise:
+    max-level: 15
+    base-cost:
+      global: 150
+      local: 0.0
+    description: "Bessere Handelspreise"
+  bestand:
+    max-level: 10
+    base-cost:
+      global: 100
+      local: 0.0
+    description: "Erhöht Handels-Bestand"
+  kampf:
+    max-level: 20
+    base-cost:
+      global: 200
+      local: 0.0
+    description: "Erhöht Kampf-Schaden"
+  reichweite:
+    max-level: 15
+    base-cost:
+      global: 150
+      local: 0.0
+    description: "Erhöht Kampf-Reichweite"
+  reflexe:
+    max-level: 15
+    base-cost:
+      global: 150
+      local: 0.0
+    description: "Erhöht Ausweichfähigkeit"
+  wissen:
+    max-level: 10
+    base-cost:
+      global: 250
+      local: 0.0
+    description: "Erhöht Forschungs-Tempo"
+  forschung:
+    max-level: 15
+    base-cost:
+      global: 300
+      local: 0.0
+    description: "Freischaffung neuer Upgrades"
+  speicherung:
+    max-level: 10
+    base-cost:
+      global: 100
+      local: 0.0
+    description: "Erhöht Lager-Kapazität"
+
+# ============================================================
+# Dialog-System Konfiguration
+# ============================================================
+messages:
+  dialogues:
+    GREETING:
+      hello-1: "Hallo {player_name}!"
+      hello-2: "Willkommen!"
+      hello-3: "Wie kann ich dir helfen?"
+      hello-4: "Gut, dich zu sehen!"
+
+    GOODBYE:
+      goodbye-1: "Auf Wiedersehen!"
+      goodbye-2: "Bis bald!"
+      goodbye-3: "Guten Tag!"
+
+    WORKING:
+      working-1: "Ich bin beschäftigt."
+      working-2: "Bin gerade am Arbeiten..."
+      working-3: "Komm später vorbei."
+
+    IDLE_CHAT:
+      idle-1: "Wie geht es dir?"
+      idle-2: "Schönes Wetter heute."
+      idle-3: "Interessant..."
+      idle-4: "Ich denke über etwas nach."
+
+    HUNGRY:
+      hungry-1: "Mir ist so hungrig..."
+      hungry-2: "Ich brauche etwas zu essen!"
+      hungry-3: "Mein Bauch rumort."
+      hungry-4: "Könnte etwas Essen brauchen."
+
+    SLEEPING:
+      sleep-1: "So müde..."
+      sleep-2: "Ich brauche Schlaf!"
+      sleep-3: "Komm morgen vorbei."
+
+    QUEST_OFFER:
+      quest-1: "Ich habe eine Aufgabe für dich!"
+      quest-2: "Kannst du mir helfen?"
+      quest-3: "Ich hätte einen Job für dich."
+      quest-4: "Willst du eine Aufgabe übernehmen?"
+
+    COMPLAINT:
+      complaint-1: "Mir geht es nicht gut."
+      complaint-2: "Ich bin unzufrieden."
+      complaint-3: "Das genügt mir nicht!"
+
+    HAPPY:
+      happy-1: "Mir geht es ausgezeichnet!"
+      happy-2: "Ich bin sehr glücklich!"
+      happy-3: "Das war großartig!"
+
+    FLEEING:
+      fleeing-1: "Hilfe!"
+      fleeing-2: "Ich muss weg!"
+      fleeing-3: "Zu Hilfe!"
+
+    TRADING:
+      trading-1: "Was möchtest du kaufen?"
+      trading-2: "Ich habe gute Angebote!"
+      trading-3: "Interessiert dich etwas?"
+
+# ============================================================
+# Beziehungs-System
+# ============================================================
+relationships:
+  reputation-thresholds:
+    hated: -50
+    disliked: -20
+    neutral: 20
+    friendly: 50
+    loved: 100
+  
+  # Ausschüttungen der Reputation
+  reputation-rewards:
+    quest-complete: 10
+    trade: 2
+    gift: 5
+    hit: -10
+    theft: -30
+
+# ============================================================
+# Villager-Limits & Kosten
+# ============================================================
+villager-limits:
+  base-max: 5
+  per-level: 1
+  per-house: 2
+
+villager-costs:
+  recruitment: 100  # Dorfpunkte
+  rename: 10
+  skill-upgrade: 50  # Base cost, multipliziert mit Level
+  job-change: 25
+
+# ============================================================
+# Performance & Optimierung
+# ============================================================
+performance:
+  # Chunk-basierte Aktivierung
+  chunk-optimization: true
+  # Max villagers pro Tick
+  max-updates-per-tick: 10
+  # Batch-Updates (alle X Ticks)
+  batch-update-interval: 20  # 1 Sekunde
+
+

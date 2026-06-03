@@ -1,0 +1,235 @@
+# Village core settings split from config.yml
+
+# --- Dorfgruendung ---
+founding:
+  # Brunnenstruktur: Wasser -> max Luft -> Glocke
+  well:
+    max-air-blocks: 10
+  # Voraussetzungen
+  requirements:
+    permission: "village.create"
+    money:
+      global: 1000.0  # Vault, 0 = deaktiviert
+      local: 0.0
+    items:
+      - material: EMERALD
+        amount: 1
+
+  rename:
+    permission: "village.rename"
+    money:
+      global: 0.0
+      local: 0.0
+    items: []
+
+joining:
+  permission: "village.join"
+  money:
+    global: 0.0
+    local: 0.0
+  items: []
+
+# --- Gebietssystem ---
+territory:
+  # Maximale horizontale Flaeche in Bloecken^2
+  max-area: 10000
+  # Hoehe relativ zur Glocke
+  height-above: 64
+  height-below: 64
+  # Initiales Startgebiet (Quadrat um Brunnen)
+  initial-size: 21  # muss ungerade sein, sonst +1
+  # Grenzvalidierung: Mindestgroesse fuer Quadrat-Check
+  min-square-size: 3
+  # Vorschau-Block (clientseitig)
+  preview-block: REDSTONE_ORE
+  # Vorschau-Block für ausgewählte Grenzbereiche beim Vereinen
+  preview-selected-block: EMERALD_ORE
+  # Vorschau-Block für geplante Gebäudekanten
+  building-preview-border-block: GOLD_ORE
+  # Fertige Gebäudekanten (dargestellt wenn Gebäude im Dorf enthalten sind)
+  building-border-block: LAPIS_ORE
+  # Vorschau-Dauer in Sekunden
+  preview-duration: 30
+  # Auswahlmethoden: COORDINATES, WALK, BOTH
+  selection-method: BOTH
+  # Debug-Logging fuer Grenzziehung zu Fuss
+  debug-walk-border: false
+  # Debug-Actionbar beim Betreten einer neuen Grenzfläche
+  debug-border-entry: false
+
+# --- Level-System ---
+levels:
+  max-level: 50
+  points-per-level:
+    - level: 1
+      points: 100
+    - level: 5
+      points: 250
+    - level: 10
+      points: 500
+    - level: 20
+      points: 1000
+    - level: 30
+      points: 2000
+    - level: 40
+      points: 5000
+    - level: 50
+      points: 10000
+  # Punkte-Quellen
+  point-sources:
+    block-place: 1
+    block-break: 1
+    mob-kill: 5
+    villager-production: 2
+    building-complete: 50
+    trade: 3
+  
+  # Levelup-Voraussetzungen pro Level
+  prerequisites:
+    # Level 1: default
+    level_1:
+      particles: "flame"
+      
+    # Level 5: braucht 5 Bewohner
+    level_5:
+      min-villagers: 5
+      particles: "flame flame_small"
+      
+    # Level 10: braucht Marktplatz
+    level_10:
+      buildings:
+        - marketplace
+      min-villagers: 10
+      particles: "flame enchant"
+      
+    # Level 20: weitere Gebäude erforderlich
+    level_20:
+      buildings:
+        - barracks
+        - farm
+        - shop
+      min-villagers: 20
+      particles: "flame soul"
+      
+    # Level 30: höhere Voraussetzungen
+    level_30:
+      buildings:
+        - watchtower
+        - factory
+      min-villagers: 30
+      particles: "flame soul soul_fire_flame"
+      
+    # Level 50: maximales Level
+    level_50:
+      min-villagers: 50
+      permission: "village.level.max"
+      particles: "soul_fire_flame enchant"
+  
+  # Partikeleffekt-Konfiguration (Blockwise)
+  particle-config:
+    enabled: true
+    check-interval-ticks: 20
+    height-above-bell: 3
+    radius-around-bell: 3
+
+
+# --- Upgrades ---
+upgrades:
+  border-expansion:
+    display-name: "&aGrenzerweiterung"
+    description: "Erweitert die maximale Dorfflaeche"
+    icon: MAP
+    max-level: 10
+    cost-per-level:
+      global: 500.0
+      local: 0.0
+    points-per-level: 100
+    area-per-level: 2000
+  max-villagers:
+    display-name: "&aMax. Dorfbewohner"
+    description: "Erhoeht die maximale Anzahl an Dorfbewohnern"
+    icon: VILLAGER_SPAWN_EGG
+    max-level: 10
+    cost-per-level:
+      global: 300.0
+      local: 0.0
+    points-per-level: 50
+    villagers-per-level: 2
+  production-speed:
+    display-name: "&aProduktionsgeschwindigkeit"
+    description: "Beschleunigt die Produktion aller Dorfbewohner"
+    icon: CLOCK
+    max-level: 5
+    cost-per-level:
+      global: 1000.0
+      local: 0.0
+    points-per-level: 200
+    speed-multiplier-per-level: 0.1
+  new-professions:
+    display-name: "&aNeue Berufe"
+    description: "Schaltet neue Berufe fuer Dorfbewohner frei"
+    icon: BOOK
+    max-level: 5
+    cost-per-level:
+      global: 750.0
+      local: 0.0
+    points-per-level: 150
+  taxes:
+    display-name: "&aSteuern & Zoelle"
+    description: "Ermoeglicht Steuereinnahmen von Besuchern"
+    icon: GOLD_INGOT
+    max-level: 3
+    cost-per-level:
+      global: 2000.0
+      local: 0.0
+    points-per-level: 500
+    tax-rate-per-level: 0.05
+  building-unlock:
+    display-name: "&aGebaeude freischalten"
+    description: "Schaltet neue Gebaeudetypen frei"
+    icon: BRICKS
+    max-level: 8
+    cost-per-level:
+      global: 600.0
+      local: 0.0
+    points-per-level: 120
+  max-members:
+    display-name: "&aMax. Spieler"
+    description: "Erhoeht die maximale Spieleranzahl im Dorf"
+    icon: PLAYER_HEAD
+    max-level: 10
+    cost-per-level:
+      global: 400.0
+      local: 0.0
+    points-per-level: 80
+    members-per-level: 3
+  defense:
+    display-name: "&aVerteidigung"
+    description: "Verbessert die Verteidigungsanlagen"
+    icon: SHIELD
+    max-level: 5
+    cost-per-level:
+      global: 1500.0
+      local: 0.0
+    points-per-level: 300
+  house_bed_expansion:
+    display-name: "&aWohnhaus-Ausbau"
+    description: "Schaltet Wohnhaus-Upgrades fuer mehr Betten frei"
+    icon: RED_BED
+    max-level: 1
+    cost-per-level:
+      global: 900.0
+      local: 150.0
+    points-per-level: 120
+  farm_composting:
+    display-name: "&aFarm-Kompostierung"
+    description: "Schaltet Farm-Upgrades und erweiterte Arbeitsplaetze frei"
+    icon: COMPOSTER
+    max-level: 1
+    cost-per-level:
+      global: 1100.0
+      local: 180.0
+    points-per-level: 140
+
+
+
