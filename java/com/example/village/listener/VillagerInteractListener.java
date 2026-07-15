@@ -3,7 +3,6 @@ package com.example.village.listener;
 import com.example.village.VillagePlugin;
 import com.example.village.config.VillageConfigManager;
 import com.example.village.gui.GuiManager;
-import com.example.village.model.BuildingType;
 import com.example.village.model.CustomVillager;
 import com.example.village.model.Village;
 import com.example.village.model.VillageBuilding;
@@ -58,10 +57,19 @@ public final class VillagerInteractListener implements Listener {
 
         if (!(entity instanceof Villager villagerEntity)) return;
 
-        // Check if this is a village villager by looking for our custom PersistentData
-        NamespacedKey key = new NamespacedKey(plugin, "village-villager-id");
-        String villagerIdStr = villagerEntity.getPersistentDataContainer()
-                .get(key, PersistentDataType.STRING);
+        // Check if this is a village villager by looking for Citizens NPC data or custom PersistentData
+        String villagerIdStr = null;
+        if (plugin.getCitizensHook().isAvailable() && net.citizensnpcs.api.CitizensAPI.getNPCRegistry().isNPC(villagerEntity)) {
+            net.citizensnpcs.api.npc.NPC npc = net.citizensnpcs.api.CitizensAPI.getNPCRegistry().getNPC(villagerEntity);
+            if (npc != null && npc.data().has("village-villager-id")) {
+                villagerIdStr = npc.data().get("village-villager-id");
+            }
+        }
+        if (villagerIdStr == null) {
+            NamespacedKey key = new NamespacedKey(plugin, "village-villager-id");
+            villagerIdStr = villagerEntity.getPersistentDataContainer()
+                    .get(key, PersistentDataType.STRING);
+        }
         // If this is NOT a custom village villager (vanilla), allow inviting by right-click
         if (villagerIdStr == null) {
             // Find village at villager location
@@ -76,9 +84,9 @@ public final class VillagerInteractListener implements Listener {
             // Attempt to convert this vanilla villager into a village villager
             com.example.village.model.CustomVillager created = villagerService.spawnVillager(village, villagerEntity.getLocation());
             if (created != null) {
-                MessageUtil.send(player, configManager.getPrefix(), "&aDorfbewohner eingeladen und ins Dorf integriert: &e" + created.getName());
+                MessageUtil.send(player, configManager.getPrefix(), configManager.text("messages.villager-invited", "&aDorfbewohner eingeladen und ins Dorf integriert: &e%name%").replace("%name%", created.getName()));
             } else {
-                MessageUtil.send(player, configManager.getPrefix(), "&cKonnte Villager nicht einladen (evtl. kein freies Bett oder Dorf voll).");
+                MessageUtil.send(player, configManager.getPrefix(), configManager.text("messages.villager-invite-failed", "&cKonnte Villager nicht einladen (evtl. kein freies Bett oder Dorf voll)."));
             }
             event.setCancelled(true);
             return;

@@ -1,0 +1,2 @@
+# Standard-Schematic: Storage
+# Erstelle diese Datei mit WorldEdit: //schem save storage.schem

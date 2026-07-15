@@ -3,6 +3,8 @@ package com.example.village.listener;
 import com.example.village.config.VillageConfigManager;
 import com.example.village.model.Village;
 import com.example.village.model.VillageBorder;
+import com.example.village.model.VillageBuilding;
+import com.example.village.service.BuildingService;
 import com.example.village.service.VillageManager;
 import com.example.village.service.LevelService;
 import com.example.village.VillagePlugin;
@@ -27,13 +29,24 @@ public final class VillageDiscoveryListener implements Listener {
     private final VillagePlugin plugin;
     private final ConcurrentHashMap<UUID, UUID> lastVillageByPlayer = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Integer> lastBorderByPlayer = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, UUID> lastBuildingByPlayer = new ConcurrentHashMap<>();
     private final java.util.concurrent.ConcurrentHashMap<UUID, Integer> activeEffectTasks = new java.util.concurrent.ConcurrentHashMap<>();
+    private BuildingService buildingService;
 
     public VillageDiscoveryListener(VillageManager villageManager, VillageConfigManager configManager, VillagePlugin plugin, LevelService levelService) {
         this.villageManager = villageManager;
         this.configManager = configManager;
         this.plugin = plugin;
         this.levelService = levelService;
+    }
+
+    /** Call this after BuildingService is fully initialized. */
+    public void setBuildingService(BuildingService buildingService) {
+        this.buildingService = buildingService;
+    }
+
+    private String t(String path, String fallback) {
+        return configManager.text(path, fallback);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -47,12 +60,40 @@ public final class VillageDiscoveryListener implements Listener {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
 
+        // ── Building-zone actionbar (independent of borderNameDebug) ──────────────
+        if (buildingService != null) {
+            Village toVillageForBuilding = villageManager.getVillageAtLocation(event.getTo()).orElse(null);
+            if (toVillageForBuilding != null) {
+                int bx = event.getTo().getBlockX();
+                int bz = event.getTo().getBlockZ();
+                VillageBuilding currentBuilding = buildingService.getBuildingAtLocation(toVillageForBuilding, bx, bz);
+                UUID currentBuildingId = currentBuilding != null ? currentBuilding.getId() : null;
+                UUID lastBuildingId = lastBuildingByPlayer.get(playerId);
+                if (!Objects.equals(currentBuildingId, lastBuildingId)) {
+                    if (currentBuildingId != null) {
+                        lastBuildingByPlayer.put(playerId, currentBuildingId);
+                    } else {
+                        lastBuildingByPlayer.remove(playerId);
+                    }
+                    showBuildingActionBar(player, toVillageForBuilding, currentBuilding);
+                }
+            } else {
+                lastBuildingByPlayer.remove(playerId);
+            }
+        }
+
         Village fromVillage = villageManager.getVillageAtLocation(event.getFrom()).orElse(null);
         Village toVillage = villageManager.getVillageAtLocation(event.getTo()).orElse(null);
         UUID currentVillageId = toVillage != null ? toVillage.getId() : null;
         UUID lastVillageId = lastVillageByPlayer.get(playerId);
+        boolean borderNameDebugEnabled = configManager.isBorderEntryDebug();
 
-        if (Objects.equals(lastVillageId, currentVillageId)) {
+        if (!borderNameDebugEnabled) {
+            lastVillageByPlayer.remove(playerId);
+            lastBorderByPlayer.remove(playerId);
+        }
+
+        if (borderNameDebugEnabled && Objects.equals(lastVillageId, currentVillageId)) {
             // If village stays the same, still allow border-region changes
             if (toVillage != null && Objects.equals(lastVillageId, currentVillageId)) {
                 int toBorderId = getBorderId(toVillage, event.getTo().getBlockX(), event.getTo().getBlockZ());
@@ -72,17 +113,21 @@ public final class VillageDiscoveryListener implements Listener {
         }
 
         if (currentVillageId == null) {
-            lastVillageByPlayer.remove(playerId);
-            lastBorderByPlayer.remove(playerId);
+            if (borderNameDebugEnabled) {
+                lastVillageByPlayer.remove(playerId);
+                lastBorderByPlayer.remove(playerId);
+            }
             cancelEffectTask(playerId);
             return;
         }
 
-        lastVillageByPlayer.put(playerId, currentVillageId);
         int toBorderId = getBorderId(toVillage, event.getTo().getBlockX(), event.getTo().getBlockZ());
-        lastBorderByPlayer.put(playerId, toBorderId);
+        if (borderNameDebugEnabled) {
+            lastVillageByPlayer.put(playerId, currentVillageId);
+            lastBorderByPlayer.put(playerId, toBorderId);
+        }
 
-        if (fromVillage != null && fromVillage.getId().equals(toVillage.getId())) {
+        if (borderNameDebugEnabled && fromVillage != null && fromVillage.getId().equals(toVillage.getId())) {
             if (configManager.isBorderEntryDebug()) {
                 showBorderActionBar(player, toVillage, toBorderId);
             }
@@ -91,9 +136,9 @@ public final class VillageDiscoveryListener implements Listener {
 
         if (!villageManager.getPlayerDiscoveredVillageIds(playerId).contains(toVillage.getId())) {
             villageManager.registerVillageDiscovery(playerId, toVillage);
-            MessageUtil.send(player, null, "&eDu hast das Dorf &6" + toVillage.getName() + " &eentdeckt!");
+            MessageUtil.send(player, null, t("messages.village-discovered", "&eDu hast das Dorf &6%name% &eentdeckt!").replace("%name%", toVillage.getName()));
         }
-        if (configManager.isBorderEntryDebug()) {
+        if (borderNameDebugEnabled) {
             showBorderActionBar(player, toVillage, toBorderId);
         }
 
@@ -109,6 +154,7 @@ public final class VillageDiscoveryListener implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         lastVillageByPlayer.remove(event.getPlayer().getUniqueId());
         lastBorderByPlayer.remove(event.getPlayer().getUniqueId());
+        lastBuildingByPlayer.remove(event.getPlayer().getUniqueId());
         cancelEffectTask(event.getPlayer().getUniqueId());
     }
 
@@ -172,9 +218,46 @@ public final class VillageDiscoveryListener implements Listener {
         if (!player.hasPermission("village.border.shownames")) return;
         String name = village.getName();
         String message = borderId < 0
-                ? "&7Grenzfläche betreten: &6" + name + " &7(keine ID)"
-                : "&7Grenzfläche betreten: &6" + name + " &7(ID=" + borderId + ")";
+                ? t("messages.border-enter-no-id", "&7Grenzfläche betreten: &6%name% &7(keine ID)").replace("%name%", name)
+                : t("messages.border-enter-id", "&7Grenzfläche betreten: &6%name% &7(ID=%id%)")
+                    .replace("%name%", name)
+                    .replace("%id%", String.valueOf(borderId));
         Component component = LegacyComponentSerializer.legacyAmpersand().deserialize(message);
         player.sendActionBar(component);
+    }
+
+    private void showBuildingActionBar(Player player, Village village, VillageBuilding building) {
+        if (player == null || village == null) return;
+        if (building == null) return;
+
+        String typeKey = building.getTypeKey();
+        String typeName = buildingService != null ? buildingService.getDisplayNameForType(typeKey) : typeKey;
+        String bName = building.hasCustomName() ? building.getCustomName() : typeName;
+        String level = String.valueOf(building.getLevel());
+
+        String message;
+        if (building.getOwnerId() != null) {
+            org.bukkit.OfflinePlayer off = org.bukkit.Bukkit.getOfflinePlayer(building.getOwnerId());
+            String ownerName = off.getName() != null ? off.getName() : "Unbekannt";
+            message = t("messages.building-enter-with-owner", "&7Gebäude: &6%building_name% &8(%building_type%&8) &7· Besitzer: &e%owner% &7· Lv.%level%")
+                    .replace("%building_name%", bName)
+                    .replace("%building_type%", typeName)
+                    .replace("%owner%", ownerName)
+                    .replace("%level%", level);
+        } else {
+            message = t("messages.building-enter", "&7Gebäude: &6%building_name% &8(&7%building_type%&8) &7Lv.%level%")
+                    .replace("%building_name%", bName)
+                    .replace("%building_type%", typeName)
+                    .replace("%level%", level);
+        }
+
+        Component component = LegacyComponentSerializer.legacyAmpersand().deserialize(message);
+        player.sendActionBar(component);
+    }
+
+    public void clearBorderTracking() {
+        lastVillageByPlayer.clear();
+        lastBorderByPlayer.clear();
+        lastBuildingByPlayer.clear();
     }
 }

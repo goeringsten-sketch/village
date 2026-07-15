@@ -1,0 +1,92 @@
+light-control:
+  enabled: true
+
+  # In diesen Welten ist der Dunkelmodus ueberhaupt aktiv.
+  # Leer = in allen Welten aktiv.
+  enabled-worlds:
+    - world
+
+  # Grundhelligkeit fuer Spieler ohne Dorf und fuer Bereiche ausserhalb
+  # aller Lichtquellen.
+  default-max-light-level: 3
+
+  # Wie oft die Distanzstufe der Spieler neu berechnet wird.
+  # Hoehere Werte sparen CPU, niedrigere reagieren schneller.
+  update-interval-ticks: 20
+
+  # Wie viele geladene Chunks um den Spieler bei einer Stufen-Aenderung
+  # oder beim Zuruecksetzen neu mit Light-Updates versorgt werden.
+  refresh-radius-chunks: 1
+
+  # Bei einem echten Helligkeitsstufen-Wechsel wird ein groesserer Bereich
+  # nachgezogen, damit keine alten hellen Chunk-Inseln sichtbar bleiben.
+  stage-change-refresh-radius-chunks: 5
+
+  # Wie viele Chunks pro Tick aktiv nachgesendet werden duerfen.
+  # Kleinere Werte sind sanfter fuer den Client, groessere synchronisieren schneller.
+  refresh-batch-size-chunks: 8
+
+  # Wenn der Spieler in einen neuen Chunk laeuft, werden bereits geladene
+  # Chunks in diesem kleinen Radius noch einmal auf die aktuelle Stufe
+  # angeglichen. Das verhindert helle Restgebiete aus der vorherigen Stufe.
+  chunk-move-refresh-radius-chunks: 2
+
+  # Distanz in Bloecken AUSSERHALB der Baugrenze und das dazugehoerige
+  # maximale Lichtlevel. Es gilt immer der letzte Eintrag, dessen Distanz
+  # kleiner oder gleich der aktuellen Distanz ist.
+  stages:
+    - distance: 0
+      max-light-level: 15
+    - distance: 10
+      max-light-level: 14
+    - distance: 20
+      max-light-level: 13
+    - distance: 30
+      max-light-level: 12
+    - distance: 40
+      max-light-level: 11
+    - distance: 50
+      max-light-level: 10
+    - distance: 60
+      max-light-level: 9
+    - distance: 70
+      max-light-level: 8
+    - distance: 80
+      max-light-level: 7
+    - distance: 90
+      max-light-level: 6
+    - distance: 100
+      max-light-level: 5
+    - distance: 110
+      max-light-level: 4
+    - distance: 120
+      max-light-level: 3
+
+  # Feste Lichtpunkte. Die Stufen werden ab dem Punkt bzw. ab base-radius angewendet.
+  points-of-interest:
+    spawn:
+      world: world
+      x: 0
+      z: 0
+      base-radius: 16
+
+  # WorldGuard-Regionen als Lichtquellen. Innerhalb der Region gilt die hellste Stufe,
+  # ausserhalb greifen die definierten Distanzstufen ab der Regionsgrenze.
+  worldguard-regions:
+    road_hub:
+      world: world
+      region-id: road_hub
+      base-radius: 0
+
+  # Helle Pfade entlang einer Linie. radius definiert die helle Korridorbreite
+  # um die Linie; ausserhalb greifen die Distanzstufen.
+  paths:
+    village-road:
+      world: world
+      from:
+        x: 0
+        z: 0
+      to:
+        x: 47
+        z: 84
+      radius: 5

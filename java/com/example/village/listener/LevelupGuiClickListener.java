@@ -40,6 +40,10 @@ public final class LevelupGuiClickListener implements Listener {
         this.guiManager = guiManager;
     }
 
+    private String t(String path, String fallback) {
+        return configManager.text(path, fallback);
+    }
+
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryClick(InventoryClickEvent event) {
         InventoryHolder holder = event.getInventory().getHolder();
@@ -58,7 +62,7 @@ public final class LevelupGuiClickListener implements Listener {
 
         Optional<Village> villageOptional = villageManager.getPlayerVillage(player.getUniqueId());
         if (villageOptional.isEmpty()) {
-            MessageUtil.send(player, "§cDorf nicht gefunden!");
+            MessageUtil.send(player, t("messages.village-not-found", "§cDorf nicht gefunden!"));
             player.closeInventory();
             return;
         }
@@ -73,7 +77,7 @@ public final class LevelupGuiClickListener implements Listener {
                 if (failureReason == null) {
                     performLevelup(player, village);
                 } else {
-                    MessageUtil.send(player, "§c" + failureReason);
+                    MessageUtil.send(player, t("messages.levelup-failed-reason", "§c%reason%").replace("%reason%", failureReason));
                 }
                 break;
             case 53: // Close button
@@ -84,7 +88,8 @@ public final class LevelupGuiClickListener implements Listener {
 
     private void performLevelup(Player player, Village village) {
         if (levelService.performLevelUp(village, player)) {
-            MessageUtil.send(player, "§aGlückwunsch! Dein Dorf ist jetzt Level §e" + village.getLevel() + "§a!");
+            MessageUtil.send(player, t("messages.levelup-success", "§aGlückwunsch! Dein Dorf ist jetzt Level §e%level%§a!")
+                    .replace("%level%", String.valueOf(village.getLevel())));
 
             LevelupGui gui = new LevelupGui(
                     VillagePlugin.getPlugin(VillagePlugin.class),
@@ -100,7 +105,7 @@ public final class LevelupGuiClickListener implements Listener {
                 village.getBellLocation().getWorld().playSound(village.getBellLocation(), org.bukkit.Sound.ENTITY_FIREWORK_ROCKET_LAUNCH, 1.0f, 1.0f);
             }
         } else {
-            MessageUtil.send(player, "§cLevelup fehlgeschlagen. Überprüfe deine Ressourcen!");
+            MessageUtil.send(player, t("messages.levelup-failed", "§cLevelup fehlgeschlagen. Überprüfe deine Ressourcen!"));
         }
     }
 

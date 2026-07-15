@@ -1,12 +1,47 @@
 # ============================================================
-# Village Plugin - Konfiguration
+#  Village Plugin - Hauptkonfiguration (config.yml)
+# ============================================================
+#  Globale Einstellungen für Speicher, Sprache, Nachrichten,
+#  Gebäudeplatzierung und das Spieler-Ernährungssystem.
+#
+#  WICHTIG: Alle Material-Namen (Items, Blöcke) müssen exakt dem
+#  Minecraft-Enum-Namen entsprechen (Großbuchstaben, Unterstriche).
+#  Vollständige Liste: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
 # ============================================================
 
-# --- Allgemein ---
-storage:
-  type: YAML  # YAML oder MYSQL (vorbereitet)
 
-# --- Nachrichten ---
+# ─────────────────────────────────────────────────────────────
+# SPEICHER & SPRACHE
+# ─────────────────────────────────────────────────────────────
+storage:
+  # Speicher-Backend für Plugin-Daten.
+  # Mögliche Werte:
+  #   YAML  - Speicherung in lokalen .yml-Dateien (Standard, kein Setup nötig)
+  #   MYSQL - Speicherung in einer MySQL-Datenbank (noch nicht vollständig implementiert)
+  type: YAML
+
+# Sprachcode für Sprachdateien unter resources/lang/<code>.yml
+# Beispiele: de, en, fr, es
+language: de
+
+
+# ─────────────────────────────────────────────────────────────
+# NACHRICHTEN & CHAT-FORMATIERUNG
+# ─────────────────────────────────────────────────────────────
+# Unterstützt Minecraft-Farbcodes mit '&' als Prefix:
+#   &0 Schwarz  &1 Dunkelblau   &2 Dunkelgrün  &3 Dunkelcyan
+#   &4 Dunkelrot &5 Dunkelviolett &6 Gold       &7 Grau
+#   &8 Dunkelgrau &9 Blau        &a Grün        &b Cyan
+#   &c Rot       &d Violett      &e Gelb        &f Weiß
+#   &l Fett  &m Durchgestrichen  &n Unterstrichen  &o Kursiv  &r Reset
+#
+# Unterstützte Platzhalter (je nach Nachricht):
+#   %name%    - Name des Dorfes
+#   %player%  - Spielername
+#   %level%   - Dorflevel
+#   %points%  - Anzahl Punkte
+#   %upgrade% - Name des Upgrades
+#   %size%    - Größenangabe (z.B. bei Grenzfehler)
 messages:
   prefix: "&8[&6Dorf&8] &7"
   no-permission: "&cDu hast keine Berechtigung."
@@ -48,7 +83,43 @@ messages:
   coord-prompt-2: "&eGib den zweiten Punkt ein (x z):"
 
 
-# Gebäude-Platzierung
+# ─────────────────────────────────────────────────────────────
+# GEBÄUDE-PLATZIERUNG
+# ─────────────────────────────────────────────────────────────
 placement:
-  # Zeit in Sekunden, nach der eine ausstehende Gebäude-Platzierung automatisch abbricht
+  # Zeit in Sekunden, nach der eine ausstehende Gebäude-Platzierung automatisch abbricht.
+  # Nach Ablauf muss der Spieler den Befehl erneut ausführen.
+  # Empfehlung: 60–300 Sekunden
   timeout-seconds: 60
+
+
+# ─────────────────────────────────────────────────────────────
+# SPIELER-NÄHRSTOFFSYSTEM
+# ─────────────────────────────────────────────────────────────
+# Steuert den Hunger- und Gesundheitsverlust von SPIELERN (nicht Dorfbewohnern).
+# Das System für Dorfbewohner-NPCs wird in villagers.yml konfiguriert.
+player-nutrition:
+  # Ob das Spieler-Nährstoffsystem aktiv ist
+  enabled: true
+
+  # Permission-Knoten, über den der Nährstoff-Typ des Spielers bestimmt wird.
+  # Das '%s' wird durch den Wert von 'permission-suffix' ersetzt.
+  # Beispiel: "village.player.eating.default" -> Standard-Ernährungsregeln
+  permission-node: "village.player.eating.%s"
+
+  # Suffix (Schlüssel) für den Standard-Nährstofftyp.
+  # Muss zu einer definierten Permission-Gruppe passen.
+  permission-suffix: "default"
+
+  # Nährstoffabnahme pro Minute (in Einheiten; 1.0 = 1 Punkt/Minute)
+  decay-per-minute: 1.0
+
+  # Nährstoffwert, ab dem der Spieler Schaden erhält (0–100)
+  damage-threshold: 15
+
+  # Intervall in Ticks zwischen zwei Schadens-Events (20 Ticks = 1 Sekunde)
+  # 400 Ticks = 20 Sekunden
+  damage-interval-ticks: 400
+
+  # Schaden pro Intervall in halben Herzen (0.5 = 1/4 Herz)
+  damage-per-interval: 0.5

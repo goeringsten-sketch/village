@@ -1,0 +1,2 @@
+# Standard-Schematic: Wall
+# Erstelle diese Datei mit WorldEdit: //schem save wall.schem

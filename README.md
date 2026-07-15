@@ -1,563 +1,320 @@
-# Village
+# Village Plugin
 
-Ein Minecraft-Plugin für umfangreiche Dorfmechaniken:
+Paper/Spigot-Plugin (Minecraft 1.21, Java 21) für Dorfgründung, Gebiete, Gebäude, Dorfbewohner, Wirtschaft und Quests.
 
-- Dorfgründung mit eigener Grenze und Verwaltung
-- Mitgliederverwaltung, Einladungen, Beitritt und Austritt
-- Dorf-Upgrades, Gebäude und Dorfbewohner
-- **Dorf-Levelup-System mit Voraussetzungen und Partikeleffekten**
-- Lichtregelung pro Gebiet mit konfigurierbaren Helligkeitsstufen
-- Dorf-Relationen: Freundschaft, Handel, Krieg und Durchgangssperre
-- GUI-gestützte Steuerung für Dörfer und Beziehungen
-- Gebäude ohne Schematic (Pfade, Brunnen, Brücken, Bezirke, etc.)
+Technische Basis: Maven, modulare Config unter `plugins/Village/config/`, Soft-Dependencies: Vault, WorldEdit, WorldGuard, Citizens, ProtocolLib, BlueMap.
+
+Weitere Details:
+
+- Die zentrale Admin-/Server-Übersicht liegt in dieser Datei.
+- Die komplette interne Projekt- und Arbeitsdokumentation ist im Ordner [`project-docs/`](project-docs/) gesammelt.
+
+---
+
+## Aktueller Stand (2026-07-15)
+
+Die folgende Übersicht basiert auf der aktuellen Code- und Config-Prüfung im Workspace und ist durch die vorhandenen Klassen/Commands verifiziert:
+
+- ✅ `/v schem list <building_type>` ist im Befehlssystem vorhanden und im Help-/Schematic-Flow dokumentiert.
+- ✅ Die Schild-Vorlage für Gebäude unterstützt den Platzhalter `%building_name%` in der `BuildingService`-Vervollständigung/Template-Auswertung.
+- ✅ Beim Tod eines Dorfbewohners wird der Eintrag im Dorf entfernt und der NPC-/Revival-Status sauber bereinigt; der letzte Tod bleibt als Revival-Fall hinterlegt.
+- ✅ BlueMap-Integration für Dorf-/Gebäude-Marker ist vorhanden und wird beim Anlegen bzw. Auflösen von Dörfern/Gebäuden synchronisiert.
+- ✅ Die Dorfgründung nutzt konfigurierbare Startoptionen aus `village.yml` (`founding.requirements`, `territory`, `selection-method`, `well.max-air-blocks` u. a.).
+- ✅ Die verbleibende harte Fehlermeldung für `LEVEL_TOO_LOW` wurde auf den Sprach-Key `building-village-level-too-low` umgestellt.
+- ✅ Das veraltete Root-Relikt `resources/quests-and-villagers.yml` wurde entfernt; der aktive Pfad ist `config/quests-and-villagers.yml`.
+- ✅ Die aktiven Gebäude- und Upgrade-Configs wurden um `max_instances` bzw. fehlende `required-village-level`-Voraussetzungen ergänzt.
+- ✅ Der Villager-Trade-Resolver ist robuster gegen Material-Namen/ID-Fallbacks und die Spieler-Nährstoff-Effektanzeige ist aktiv.
+- ⚠️ Die eigentliche Playtest-/Ingame-Validierung der Quest- und Upgrade-Flow bleibt weiterhin ein Admin-/Tester-Check.
+
+### Plan für die Admin-/Tester-Handreichung
+
+Die vorhandene DOCX-Datei soll als lebendige Handreichung dienen und nicht nur als alter Bug-Tracker. Daher wird sie künftig in drei Bereiche gegliedert:
+
+1. Aktueller Funktionsstand (implementiert, teilweise umgesetzt, offen).
+2. Offene Bugs und bekannte Einschränkungen mit Priorität.
+3. Test- und Rollout-Checkliste für Admins und Tester.
+
+Diese README- und DOCX-Update-Arbeit bildet die Grundlage für den nächsten Schritt.
+
+---
+
+## Inhaltsverzeichnis
+
+- [Installation](#installation)
+- [Konfigurationsdateien](#konfigurationsdateien)
+- [Einrichtung (Kurzüberblick)](#einrichtung-kurzüberblick)
+- [Kernfunktionen (Stand)](#kernfunktionen-stand)
+- [Quest-System](#quest-system)
+- [Licht- & Dunkelmodus](#licht--dunkelmodus)
+- [Ernährungssystem (Füttern & Nährstoffe)](#ernährungssystem-füttern--nährstoffe)
+- [Gebäude & Jobs (Stand)](#gebäude--jobs-stand)
+- [Performance & Debugging](#performance--debugging)
+- [Offene TODOs / Roadmap](#offene-todos--roadmap)
+- [Build & Tests](#build--tests)
 
 ---
 
 ## Installation
 
-1. Installiere Java 21 über SDKMAN und nutze es für den Build:
-   ```bash
-   curl -s "https://get.sdkman.io" | bash
-   source "$HOME/.sdkman/bin/sdkman-init.sh"
-   sdk install java 21.0.11-jbr
-   sdk use java 21.0.11-jbr
-   ```
-2. Baue das Plugin mit Maven:
-   ```bash
-   mvn clean package
-   ```
-   oder als Einzeiler:
-   ```bash
-   sdk use java 21.0.11-jbr && mvn clean package
-   ```
-3. Kopiere die erzeugte JAR-Datei in den `plugins`-Ordner deines Minecraft-Servers.
-4. Starte den Server neu.
- 
-## Entwicklerhinweise
+```bash
+mvn -DskipTests clean package
+```
 
-Wenn du am Plugin entwickelst oder es lokal kompilieren möchtest, verwende SDKMAN zur Verwaltung der Java-Versionen (unterstützt z.B. Java 21 und Java 24). Empfohlen ist, vor dem Build die gewünschte JDK-Version zu aktivieren.
+JAR: `target/village-1.0.0.jar` → `plugins/`
 
-Beispielablauf:
+Empfohlene Abhängigkeiten: **Vault**, **WorldEdit**, **WorldGuard** (optional: Citizens, ProtocolLib, BlueMap).
+
+Hauptbefehl: `/village` (Alias: `/v`, `/dorf`)
+
+---
+
+## Konfigurationsdateien
+
+| Datei | Inhalt |
+|---|---|
+| `config.yml` | Speicher (`YAML`/`MYSQL`), Sprache |
+| `config/village.yml` | Dorf-Level, Upgrades (`required-village-level`), Grenzen, Gründung |
+| `config/buildings.yml` | Gebäudetypen, Schematics, Block-Check, Workstations, optional `max_instances` |
+| `config/villagers.yml` | Berufe, Tagesablauf, Nährstoffe & Fütterung, Skills, Revival |
+| `config/players.yml` | Rollen, Berechtigungen |
+| `config/currencies.yml` | Globale & lokale Währungen |
+| `config/quests-and-villagers.yml` | Quests, Reputation, Performance-Parameter |
+| `config/light-limits.yml` | Dunkelmodus, POIs, Minen-Dunkelheit (`underground-max-level`) |
+| `config/debug.yml` | Debug-Flags (`building`, `chat`, `light`, `villager`) |
+| `lang/de.yml`, `lang/en.yml` | Nachrichten |
+
+> Konfigurations- und Projekt-Hinweise für Entwickler sind im internen Ordner [`project-docs/`](project-docs/) zusammengefasst.
+
+---
+
+## Einrichtung (Kurzüberblick)
+
+1. Vault + Economy-Plugin installieren
+2. `config.yml`: `storage.type: YAML`, `language: de`
+3. Gründungskosten in `village.yml` → `founding` setzen
+4. Währungen in `currencies.yml` konfigurieren
+5. Berufe & Nährstoffe in `villagers.yml` anpassen
+6. Gebäude in `buildings.yml` aktivieren
+7. Licht-System in `light-limits.yml` (optional)
+8. Quests in `quests-and-villagers.yml`
+
+Häufige Fehler: `initial-size` muss **ungerade** sein; Material-Namen in **GROSSBUCHSTABEN**; Debug-Flags nach Tests wieder auf `false`.
+
+---
+
+## Kernfunktionen (Stand)
+
+| Bereich | Status | Anmerkung |
+|---|---|---|
+| Dorfgründung & Glocke | ✅ | Inkl. auto-registriertes Dorfzentrum und konfigurierbare Startoptionen |
+| Grenzen (Walk, Koordinaten, Fusion) | ✅ | |
+| Gebäude (Schematic + Block-Check) | ✅ | Skelett-/Dach-Validierung für `hollow_structure` |
+| Gebäude-Instanzlimits (`max_instances`) | ✅ | Code + Tests; optional pro Gebäude in `buildings.yml` |
+| Schematic-Tool ingame (`/v schem`) | ✅ | inkl. `list <building_type>`-Unterstützung |
+| Villager spawnen, Bett/Job zuweisen | ✅ | Linksklick auf Arbeitsblock |
+| Berufe aus `villagers.yml` | ✅ | 17 Jobs im Enum + Config-Professions |
+| Tagesablauf (`activity-sequence`) | ✅ | Alle 17 Berufe definiert |
+| Produktion & Skill-Bäume | ✅ | |
+| Quests & Handel | ✅ | Sammelquests, Fortschritts-Tracking und GUI-/Command-Flow |
+| Upgrade-Level-Voraussetzungen | ✅ | `required-village-level` pro Upgrade (Default: 1) |
+| Währungen (global/lokal) | ✅ | Vault-Integration |
+| Nährstoff-/Fütterungssystem | ✅ | Vollständig laut Spezifikation |
+| Licht- & Dunkelmodus | ✅ | Inkl. Minen-Dunkelheit unter Y=40 |
+| NPC-Performance-Optimierung | ✅ | Queue-Ticking, Chunk-Optimierung |
+| Citizens-NPC-Bewegung | ⚠️ | Optional, benötigt Citizens |
+
+---
+
+## Quest-System
+
+Konfiguration: `config/quests-and-villagers.yml`
+
+| Feature | Beschreibung |
+|---|---|
+| `objective-type` | Pflicht für alle Quests (`collect-items`, `feed-villagers`, `recruit-villager`, `trade`, …) |
+| `required-items` | Bei `collect-items`: Items werden beim Abschluss aus dem Inventar abgezogen |
+| `required-village-level` | Mindest-Dorflevel pro Quest |
+| `villager-limits` | **Entfernt** – einheitliche Quelle ist `villagers.yml` → `base-max` |
+
+Beispiel Sammelquest:
+
+```yaml
+starter-quest-1:
+  objective-type: collect-items
+  required-items:
+    OAK_LOG: 10
+```
+
+---
+
+## Licht- & Dunkelmodus
+
+Konfiguration: `config/light-limits.yml`
+
+- Entfernungsbasierte Helligkeitsstufen um Dörfer, POIs und Straßen
+- **`underground-max-level: 40`** – unter Y=40 werden 2D-Lichtquellen ignoriert (Minen standardmäßig dunkel)
+- Deaktivieren mit `-999`
+- **`refresh-batch-size-chunks: 4`** – reduziert Performance-Spitzen bei vielen Spielern
+- Adaptives Chunk-Batching skaliert mit Spieleranzahl
+
+---
+
+## Ernährungssystem (Füttern & Nährstoffe)
+
+Zentrale Klassen: `VillagerNutritionService`, `VillagerScheduleManager`, `VillagerTickService`, `CustomVillager`.
+
+Konfiguration: `config/villagers.yml` → `needs`, `nutrients`, `feeding`, `nutrition`, `schedule`.
+
+### Implementierungs-Checkliste (Spezifikation vs. Code)
+
+| Anforderung | Status |
+|---|---|
+| Hunger-Schaden unter Schwellwert | ✅ |
+| Spieler-Fütterung / Kreativ | ✅ |
+| Selbst-Fütterung | ✅ |
+| Nährstoffwerte pro Lebensmittel | ✅ |
+| Sofort + periodische Wiederherstellung | ✅ |
+| Hunger = Durchschnitt der Nährstoffe | ✅ |
+| Abbau pro Tick + am Aktivitätsende | ✅ |
+| Aktivitäts-Sequenz pro Job (17 Berufe) | ✅ |
+| Effekte (Prod., Lauf, XP, Bau, Beziehung) | ✅ |
+| Negative Effekte & Dauer-Stacking | ✅ |
+| Feed-Interval & Flags | ✅ |
+| `hunger`-Key in recovery | ✅ |
+
+**Revival:** Wiederbelebung beim Medikus, Berechtigung `village.revival.use`.
+
+### Lebensmittel in `villagers.yml`
+
+Alle gelisteten Items sind konfiguriert, inkl. COOKED_COD, COOKED_PORKCHOP, BEETROOT, SUSPICIOUS_STEW.
+
+### Konfigurierbare Effekt-Schlüssel
+
+| Effekt-Key | Verwendung |
+|---|---|
+| `production-speed` | Produktions-Multiplikator |
+| `movement-speed` | Citizens-Navigator `speedModifier` |
+| `xp-gain` | XP bei Produktion |
+| `build-speed` | Konstruktionsdauer |
+| `relationship` / `communication` | Reputation bei Fütterung |
+
+Negative Werte (z. B. `production-speed: -0.05`) reduzieren den Multiplikator.
+
+---
+
+## Gebäude & Jobs (Stand)
+
+### Gebäude-Validierung
+
+- **SCHEMATIC:** WorldEdit-Schematic, blockweiser Bau, danach `completed = true`
+- **HYBRID:** Schematic mit `.schem.meta` (STRUCTURE vs. DECORATION); `validation_mode: hybrid`
+- **BLOCK_CHECK:** Blöcke/Hohlraum im definierten Bereich; optional **Ästhetik-Score** (`AestheticScoreService`)
+- **hollow_structure:** Zusätzlich Skelett- (Wände/Boden) und Dach-Validierung (`BlockCheckValidator`)
+- **Fundament-Stretching:** Schematics passen sich automatisch ans Terrain an (`FoundationStretchService`)
+
+Details: siehe [`project-docs/gebaeude_konzept.md`](project-docs/gebaeude_konzept.md) für die interne Gebäude-Roadmap.
+
+### Instanzlimits
+
+```yaml
+# buildings.yml – optional pro Gebäude
+max_instances: 1   # -1 = unbegrenzt (Default)
+```
+
+Platzierung schlägt fehl mit `TOO_MANY_INSTANCES`, wenn das Limit erreicht ist.
+
+### Modulare Schematic-Upgrades (`modular_extensions`)
+
+Für Upgrade-Stufen kann ein Gebäude zusätzliche Module an benannten Ankerpunkten im Basis-Schematic einhängen. Das Prinzip ist:
+
+1. In der `.schem.meta`-Datei werden Marker-Anker definiert, zum Beispiel `roof_center` oder `north_wall`.
+2. Im `buildings.yml`-Upgrade wird `modular_extensions` ergänzt.
+3. Beim Upgrade wird das Modul-Schematic an den benannten Anker des Basis-Schematics eingesetzt.
+
+Beispiel:
+
+```yaml
+upgrades:
+  tier_2:
+    attach_at: "roof_center"
+    module: "kartograph_tower.schem"
+```
+
+Wichtig:
+
+- `attach_at` muss exakt dem Namen aus der `.schem.meta`-Datei entsprechen.
+- `module` ist die Schematic-Datei, die am Ankerpunkt platziert werden soll.
+- Das Basis-Schematic bleibt dabei unverändert; nur die Modul-Erweiterung wird hinzugefügt.
+
+### Config-Bereinigungen (01/2026)
+
+- Doppelte Keys in `general`/`production` → `deko_forst`, `deko_acker`, `deko_beet`, `deko_tierzucht`
+- Rezept-Jobs korrigiert (Fischer, Schmied statt Händler/Bauer)
+- `imkerei`/`imker`-Duplikat bereinigt, Material `BEEHIVE`
+- Ungültiges Material `HOES` → `WOODEN_HOE`
+
+### Berufe (Enum `VillagerJob`)
+
+Bauer, Bergarbeiter, Holzfäller, Tischler, Schmied, Steinmetz, Imker, Bäcker, Brauer, Fischer, Jäger, Wache, Händler, Gelehrter, Kartograph, Medikus, Kurier (+ Arbeiter/none als Fallback).
+
+Job-Zuweisung: Villager-Menü → **Job zuweisen** → Linksklick (oder Rechtsklick) auf Arbeitsblock eines **fertigen** Gebäudes. Abbruch: `/v abort`.
+
+Workstation-Erkennung nutzt Config-Area **und** Schematic-Bounding-Box (`BuildingBoundsUtil`).
+
+---
+
+## Performance & Debugging
+
+### Performance (`quests-and-villagers.yml` → `performance`)
+
+| Feld | Default | Wirkung |
+|---|---|---|
+| `chunk-optimization` | `true` | Kein Tick in ungeladenen Chunks |
+| `max-updates-per-tick` | `10` | CPU-Last pro Tick begrenzen |
+| `batch-update-interval` | `20` | Intervall für Batch-Updates |
+
+`VillagerTickService` nutzt eine interne Warteschlange mit `max-updates-per-tick`.
+
+### Debug (`debug.yml`)
+
+| Flag | Zweck |
+|---|---|
+| `building` | Platzierung, Validierung, Schematics |
+| `chat` | Dialoge & Chat |
+| `light` | Licht-Stages, Chunk-Refresh |
+| `villager` | State-Wechsel, Tagesablauf, KI-Ticker |
+
+> Debug-Flags im Live-Betrieb auf `false` lassen.
+
+---
+
+## Offene TODOs / Roadmap
+
+### Aktuell offen
+
+- Modulare Schematic-Upgrades über `modular_extensions` in `buildings.yml` mit Ankern aus `.schem.meta`
+- Adaptives Dach bei starkem Terrain-Gefälle
+- Ingame-Dekorations-Editor zum Erzeugen von `.schem.meta`-Dateien
+
+### Bewusst zurückgestellt
+
+- Vollständige Level-Prerequisites für alle Dorf-Level (2–4, 6–9, …) in `village.yml`
+- Feinjustierung der `max_instances`-Werte in `buildings.yml` je Gebäude
+- Optionales Produktivitäts-/UI-Polishing rund um `PlayerNutritionService` und den lokalen Villager-Trade-Resolver
+
+---
+
+## Build & Tests
 
 ```bash
-# SDKMAN installieren (falls noch nicht installiert)
-curl -s "https://get.sdkman.io" | bash
-source "$HOME/.sdkman/bin/sdkman-init.sh"
-
-# Liste verfügbare JDKs und wähle eine Version aus (z. B. Java 21 oder Java 24)
-sdk list java
-
-# Installieren/auswählen (Beispiele; wähle die passende ID aus der Liste)
-sdk install java 21.0.11-jbr
-sdk use java 21.0.11-jbr
-# oder für Java 24 (ID aus `sdk list java` wählen):
-sdk install java 24.<version>-open
-sdk use java 24.<version>-open
-
-# Projekt kompilieren (schnell prüfen, ohne Tests)
-mvn -DskipTests=true clean compile
-
-# Vollständiges Paket
-mvn clean package
+mvn test                    # Unit-Tests (aktuell 31 Tests)
+mvn -DskipTests clean package
 ```
 
-Hinweise:
-- Nutze `sdk list java`, um die exakte ID für die gewünschte JDK-Version zu finden.
-- Verwende `mvn -DskipTests=true clean compile` für schnelle Kompilierprüfungen während der Entwicklung.
-- CI/Release-Builds sollten `mvn clean package` verwenden und Tests ausführen.
+Relevante Testklassen:
 
-Ich habe lokal eine Kompilierung via Maven ausgeführt, um sicherzustellen, dass der Code kompiliert.
+- `QuestConfigTest` – Quest-Objective & `required-items`
+- `LightLimitsConfigTest` – `underground-max-level`
+- `BuildingConfigMaxInstancesTest` – `max_instances`-Validierung
 
-Bitte führe bei Änderungen vor dem Commit lokal `mvn -DskipTests=true clean compile` aus, um sicherzustellen, dass keine Kompilationsfehler eingeführt werden.
-
-**Letzte erfolgreiche lokale Kompilierung:** 2026-06-02T10:23:24Z (BUILD SUCCESS)
-
----
-
-## Berechtigungen (Permissions)
-
-Für Dorf-Verwaltung, Gebäude-Interaktion und spezielle Features kannst du folgende Permissions verwenden (für Permission-Management-Systeme wie LuckPerms):
-
-| Permission | Beschreibung |
-|---|---|
-| `village.admin` | Vollständiger administrativer Zugriff (umgeht alle Einschränkungen) |
-| `village.list.all` | Sehe alle Dörfer in der `/village list` Anzeige (inkl. unbekannter Dörfer) |
-| `village.list` | Basis-Permission für `/village list` Kommando |
-| `village.tp.others` | Teleportiere Spieler zu Dörfern mit `/village tp <dorf> <spieler>` (oder klickbar in Liste) |
-| `village.border.shownames` | Zeige Grenzennamen bei Betreten/Verlassen einer Grenze an |
-| `village.building.*` | Interagiere mit allen Workstations (Ofenmodus, etc.) |
-| `village.bypass` | Umgehe bestimmte Einschränkungen (für Admin-Features) |
-| `village.villager.show.temp` | Zeige Dorfbewohner temporär mit Glowing-Effekt an (ca. 15 Sekunden, konfigurierbar) |
-| `village.villager.show.on` | Zeige Dorfbewohner dauerhaft mit Glowing-Effekt an (bis deaktiviert) |
-| `village.admin.trade` | Admin-Kommandos für Handels-Management |
-
-Hinweise:
-- `village.admin` gewährt unbegrenzten Zugriff; alle einzelnen Permissions sind optional.
-- `village.list` und `village.list.all` kontrollieren Zugriff auf das `/village list` Kommando.
-- `village.tp.others` erlaubt Teleportation zu Dörfern und ist erforderlich, um in `/village list` auf Village-Namen zu klicken.
-- `village.villager.show.temp` und `village.villager.show.on` bestimmen den Zugriff auf die Dorfbewohner-Glowing-Anzeige im Dorfbewohner-Menü (Slot 48).
-- Einzelne Dorf-Rollen (Gründer, Manager, etc.) werden über die Dorf-interne Verwaltung zugewiesen und erfordern diese Permissions nicht.
-
-### Gebäude- und Upgrade-Permissions
-
-Gebäude und ihre Upgrades werden über ein granulares Permission-System gesteuert, konfigurierbar in `config/buildings.yml`. Die Struktur folgt diesem Schema:
-
-```
-village.building.<kategorie>.<gebäudetyp>
-village.building.<kategorie>.<gebäudetyp>.upgrade.<upgrade-name>
-```
-
-**Beispiele aus der Konfiguration:**
-
-| Permission | Beschreibung |
-|---|---|
-| `village.building.general.dorfzentrum` | Platziere/verwalte das Dorfzentrum |
-| `village.building.general.dorfzentrum.upgrade.2` | Upgrade zu Erweitertes Dorfzentrum (Tier 2) |
-| `village.building.general.dorfzentrum.upgrade.3` | Upgrade zu Prächtiges Dorfzentrum (Tier 3) |
-| `village.building.general.dorfzentrum.upgrade.small_storage` | Unlock Kleines Lager (Upgrade) |
-| `village.building.general.dorfbrunnen` | Platziere/verwalte den Dorfbrunnen |
-| `village.building.wohnen.baracke.upgrade.2` | Upgrade zur Baracke Tier 2 |
-
-**Konfiguration in `config/buildings.yml`:**
-
-Jedes Gebäude hat eine `permission`-Feld und optionale `upgrades` mit individuellen Permissions:
-
-```yaml
-buildings:
-  special:
-    dorfzentrum:
-      name: "Dorfzentrum"
-      permission: "village.building.general.dorfzentrum"
-      upgrades:
-        tier_2:
-          name: "Erweitertes Dorfzentrum"
-          permission: "village.building.general.dorfzentrum.upgrade.2"
-          requires_village_level: 3
-          build_cost:
-            items: { STONE_BRICKS: 64, OAK_LOG: 32 }
-            money: 100
-        tier_3:
-          name: "Prächtiges Dorfzentrum"
-          permission: "village.building.general.dorfzentrum.upgrade.3"
-          requires_village_level: 6
-```
-
-**Verwendung mit LuckPerms:**
-
-```
-/luckperms user <spieler> permission set village.building.general.dorfzentrum true
-/luckperms user <spieler> permission set village.building.general.dorfzentrum.upgrade.small_storage true
-```
-
-**Automatische Freischaltung:**
-
-Wenn ein Upgrade in der Config `achievement`-Benachrichtigungen oder `commands` definiert, werden diese beim erfolgreichen Upgrade ausgelöst. Die erforderliche `requires_village_level` wird automatisch überprüft.
-
-**Optionale Abhängigkeiten** (für erweiterte Funktionen):
-- Vault — Wirtschafts-Integration
-- WorldEdit — Gebäude-Schematic-Verwaltung
-- WorldGuard — Region-Schutz
-- Citizens — NPC-Integration für Dorfbewohner (optional)
-- ProtocolLib — Paket-Manipulation für GUI-Effekte
-
----
-
-## Konfiguration
-
-Standardkonfigurationen liegen in `resources/config.yml` und in `resources/config/village.yml`.
-
-| Datei | Zweck |
-|---|---|
-| `config.yml` | Globale Einstellungen: Grenzen, Upgrades, Wirtschaft, Gebäude-Platzierungs-Timeout |
-| `config/village.yml` | Levelup-System, Partikeleffekte |
-| `config/light-limits.yml` | Lichtbegrenzung, Weltfilter, Aktualisierungsintervalle |
-| `config/buildings.yml` | Gebäudetypen, Workstations, Kategorien, Timeouts |
-
-### Gebäude-Platzierungs-Timeout
-
-In `config.yml`:
-```yaml
-placement:
-  timeout-seconds: 60   # Sekunden bis automatischer Abbruch der Platzierung
-```
-
-### Gebäude-Vorschau-Konfiguration
-
-In `config/village.yml` unter `territory` lassen sich Vorschaublöcke für Rand- und Gebäudepreview anpassen:
-```yaml
-territory:
-  preview-block: REDSTONE_ORE
-  preview-selected-block: EMERALD_ORE
-  building-preview-border-block: GOLD_ORE
-  building-border-block: LAPIS_ORE
-```
-
-### Debug-Actionbar beim Betreten neuer Border-Flächen
-
-Zum Aktivieren in `config/village.yml`:
-```yaml
-territory:
-  debug-border-entry: true
-```
-
-Wenn ein Spieler eine Baustelle platzieren soll und innerhalb dieser Zeit keinen Block anklickt, wird die Platzierung automatisch abgebrochen. Der Timer wird zurückgesetzt, sobald das Gebäude erneut aus dem Menü heraus platziert wird.
-
-### Levelup-System konfigurieren
-
-In `config/village.yml` unter `levels`:
-
-```yaml
-levels:
-  max-level: 50
-  points-per-level:
-    - level: 1
-      points: 100
-    - level: 5
-      points: 250
-    # ... weitere Level
-
-  prerequisites:
-    level_1:
-      particles: "flame"
-    level_5:
-      min-villagers: 5
-      particles: "flame flame_small"
-    level_10:
-      buildings:
-        - marketplace
-      min-villagers: 10
-      particles: "flame enchant"
-
-  particle-config:
-    enabled: true
-    check-interval-ticks: 20
-    height-above-bell: 3
-    radius-around-bell: 3
-```
-
----
-
-## Befehle
-
-### Spieler-Befehle
-
-| Befehl | Beschreibung |
-|---|---|
-| `/village` | Öffnet das Dorfmenü oder zeigt Hilfe an |
-| `/village info [Name]` | Zeigt Informationen zu einem Dorf |
-| `/village list` | Listet alle Dörfer auf |
-| `/village join <Name>` | Sendet eine Beitrittsanfrage |
-| `/village joinrequest accept\|deny <VillageUUID> <PlayerUUID>` | Bearbeitet eine Beitrittsanfrage |
-| `/village leave` | Verlässt dein aktuelles Dorf |
-| `/village invite <Spieler>` | Lädt einen Spieler ein |
-| `/village kick <Spieler>` | Entfernt einen Spieler |
-| `/village promote <Spieler> <Rolle>` | Befördert einen Spieler |
-| `/village memberremoveconfirm ja\|nein <VillageUUID> <MemberUUID>` | Bestätigt das Entfernen eines Mitglieds |
-| `/village border` | Öffnet die Grenzauswahl |
-| `/village manage border info` | Zeigt Grenzflächen-Infos inkl. ID der Fläche |
-| `/village manage border delete [ID]` | Löscht eine Grenzfläche (nicht die Default-Fläche) |
-| `/village manage border fusion <ID1> <ID2>` | Vereint zwei angrenzende Grenzflächen |
-| `/village preview` | Zeigt die Dorfgrenzen an |
-| `/village tp <village_id|name> [<player>]` | Teleportiert dich oder einen Spieler zum Dorf |
-| `/village delete` | Löscht dein Dorf |
-| `/village rename <Name>` | Ändert den Dorfnamen |
-| `/village menu` | Öffnet das Haupt-Dorfmenü |
-| `/village signshowconfirm ja\|nein` | Bestätigt das Einblenden eines verschobenen Schildes |
-| `/village building start <Nr>` | Startet den Baustellenbau für ein Gebäude |
-| `/village building cancel <Nr>` | Bricht eine aktive Konstruktion ab |
-| `/village cancel` | Bricht eine laufende Gebäude-Platzierung ab |
-
-### Admin-Befehle
-
-| Befehl | Beschreibung |
-|---|---|
-| `/village reload` | Lädt die Konfiguration neu (**auch von der Konsole ausführbar**) |
-| `/village admin setlevel <Dorf> <Level>` | Setzt das Dorf-Level |
-| `/village admin addpoints <Dorf> <Punkte>` | Addiert Dorfpunkte |
-| `/village admin delete <Dorf>` | Löscht ein Dorf |
-| `/village admin saveall` | Speichert alle Dörfer |
-| `/village schematic tool` | Gibt ein Auswahl-Werkzeug für Schematic-Positionen |
-| `/village schematic pos1` | Setzt Position 1 der Schematic |
-| `/village schematic pos2` | Setzt Position 2 der Schematic |
-| `/village schematic origin` | Setzt den Ursprung der Schematic |
-| `/village schematic save <name>` | Speichert die aktuelle Auswahl als `.schem`-Datei |
-| `/village schematic register <name> [...]` | Registriert eine Schematic in `config/buildings.yml` || `/village schematic list <building_type>` | Listet verfügbare Schematic-Varianten für einen Gebäudetyp |
-> Alle `schematic`-Befehle erfordern `village.admin`.
-
----
-
-## Berechtigungen
-
-| Permission | Beschreibung |
-|---|---|
-| `village.admin` | Voller Admin-Zugriff inkl. Konsolen-Reload |
-| `village.create` | Erlaubt das Gründen eines Dorfes |
-| `village.manage` | Erlaubt Dorfverwaltung (Upgrades, Gebäude usw.) |
-| `village.bypass` | Umgeht Dorf-Einschränkungen |
-
----
-
-## Gebäude-System
-
-### Grundprinzip
-
-Dörfer können vorgefertigte Gebäude bauen. Jedes Gebäude hat einen Typ (`typeKey`), eine Richtung (`direction`: N/S/E/W) und eine Position im Dorfgebiet.
-
-**Gebäudetypen:**
-
-| Typ | Beschreibung |
-|---|---|
-| Schematic-Gebäude | Werden aus einer `.schem`-Datei platziert |
-| Block-Check-Gebäude | Keine Schematic – das Plugin prüft ob konfigurierte Blöcke vorhanden sind |
-| Pfade | Werden durch Ablaufen erstellt, bilden einen Routing-Graphen |
-
-### Platzierungsregeln
-
-Beim Platzieren einer Baustelle gelten folgende Regeln – das Plugin gibt bei Verletzung eine genaue Fehlermeldung aus:
-
-| Fehler | Bedeutung |
-|---|---|
-| `OUTSIDE_BORDER` | Das Gebäude liegt vollständig außerhalb der Dorfgrenzen |
-| `ON_START_BORDER` | Das Gebäude überlappt den Dorfbrunnen-Bereich |
-| `OVERLAPS_BUILDING` | Das Gebäude überschneidet ein bestehendes Gebäude oder den Dorfbrunnen |
-| `PARTIAL_OUTSIDE_BORDER` | Das Gebäude liegt teilweise auf einer Dorfgrenzlinie |
-| `BUILDING_TOO_FAR` | Das Gebäude liegt außerhalb des erlaubten Bauradius |
-| `INSIDE_DEFAULT_BORDER` | Das Gebäude liegt nur in der Default-Grenzfläche, obwohl Erweiterungsflächen existieren |
-
-> Gebäudegrenzen dürfen sich **nicht überschneiden**. Das gilt auch für den Dorfbrunnen (Startgebäude). Es kann immer nur einen Dorfbrunnen geben.
-
-### Dorfbrunnen (Startgebäude)
-
-Der Dorfbrunnen (`dorfbrunnen`) ist das erste Gebäude eines jeden Dorfes und wird automatisch bei der Dorfgründung registriert. Er definiert das Dorfzentrum. Kein weiteres Gebäude darf seinen Bereich überschneiden.
-
-### Workstations zuweisen
-
-Workstations werden **in `config/buildings.yml`** pro Gebäudetyp konfiguriert, nicht manuell per Befehl:
-
-```yaml
-categories:
-  general:
-    buildings:
-      farm:
-        workstation_blocks:
-          workstation: FARMLAND
-          workstation_compost: COMPOSTER
-        area:
-          shape: rectangle
-          min_width: 5
-          max_width: 10
-```
-
-Das Plugin erkennt beim Platzieren automatisch, ob die konfigurierten Blöcke innerhalb des Bereichs vorhanden sind. Der **primäre Workstation-Block** (`workstation:`) ist derjenige, den der Spieler beim Platzieren anklickt.
-
-### Villager einem Gebäude zuweisen (Beruf)
-
-1. Öffne das **Baumenü** des Gebäudes (Rechtsklick auf das Gebäude-Schild).
-2. Klicke auf **„Villager zuweisen"** – es öffnet sich eine Liste der Dorfbewohner.
-3. Wähle den gewünschten Dorfbewohner aus.
-4. Klicke im Spiel auf einen **Arbeitsblock (Workstation)** des Gebäudes.
-5. Der `JobAssignmentListener` verknüpft den Villager mit dem Block und setzt den Beruf automatisch anhand des Block-Typs.
-
-Villager entnehmen Materialien aus konfigurierten Dorftruhen. Chat-Meldungen informieren über Materialmangel, Fortschritt und Fertigstellung.
-
-### Gebäude-Schild
-
-Jedes Gebäude hat ein Schild, das per Rechtsklick das Baumenü öffnet. Das Schild kann über das Gebäudemenü ausgeblendet und wieder eingeblendet werden. Beim Wiedereinblenden wird die gespeicherte Richtung (`direction`) korrekt gesetzt – sowohl bei Wandzeichen als auch bei Bodenzeichen.
-
----
-
-## Grenzen und Glocken
-
-### Dorfgründung
-
-1. Brunnen mit Wasser und Glocke darüber bauen.
-2. `/village border` für die Grenzauswahl ausführen.
-3. Grenze per Koordinaten eingeben **oder** ablaufen.
-4. Vorschau mit roten Blöcken bestätigen.
-
-### Grenzauswahl per Koordinaten (Zwei-Punkte-Methode)
-
-- Zwei Blöcke anklicken oder jeweils `x z` in den Chat eingeben.
-- Das Plugin berechnet ein Rechteck aus den beiden Punkten.
-- Bei ungültiger Auswahl wird eine **genaue Fehlermeldung** ausgegeben (z.B. ob die Grenze das Dorfzentrum einschließen würde, die Fläche zu groß ist oder keine Verbindung zum bestehenden Gebiet besteht).
-
-### Grenzfunktionen
-
-- Polygonale Grenzen möglich.
-- Höhe: 64 Blöcke über/unter Glocke.
-- Validierung: Mindestens 3×3 Quadrat an jeder Stelle platzierbar.
-- Erweiterung durch Upgrades.
-- Grenzflächen-IDs: Default-Fläche ist immer `0` (nicht einzeln löschbar), zusätzliche Flächen starten bei `1`.
-- Gelöschte IDs werden wiederverwendet.
-- **Grenzen löschen**: Warnung mit klickbaren Buttons (`[JA] [NEIN] [ABBRECHEN]`).
-- **Grenzen vereinen**: Start über das Grenzen-Menü, 2+ Grenzflächen anklicken.
-- **Diagonal-Lücken**: Kantenberechnung ergänzt automatisch orthogonale Verbindungsblöcke.
-
-### WorldGuard-Integration
-
-- Pro Grenzfläche wird eine WorldGuard-Region erzeugt (polygonal).
-- Regionsnamen: `<dorfname>_<id>`.
-- Owner werden nach WorldGuard gespiegelt.
-
-### Dorfglocke (Schutz)
-
-Die Dorfglocke ist das Zentrum des Dorfes und **vollständig geschützt**:
-- Die **Glocke selbst** kann nicht abgebaut werden.
-- Der **Block direkt über der Glocke** ist ebenfalls geschützt, damit die Glocke nicht durch indirektes Abbauen zerstört werden kann.
-
----
-
-## Villager-System
-
-### Citizens-Integration
-
-Das Plugin unterstützt Citizens-NPCs als Dorfbewohner. Ohne Citizens werden Vanilla-Villager verwendet, die über eine `village-villager-id` PersistentData getrackt werden.
-
-### Dorf auflösen – Villager-Verhalten
-
-Wird ein Dorf gelöscht, werden **alle Dorfbewohner vollständig zu Vanilla-Villagern konvertiert**:
-- Citizens-NPCs werden entfernt.
-- Es wird ein sauberer Vanilla-Villager ohne Custom-Namen und ohne Plugin-Tags gespawnt.
-- Bereits als Vanilla-Entitäten getrackten Villager verlieren ihren Namen (`customName = null`) und den `village-villager-id`-Tag.
-
----
-
-## Rollenmodell (Mehrfachrollen)
-
-| Rolle | Rechte |
-|---|---|
-| **Gründer** | Vollzugriff, kann Gründerrolle übertragen (einzigartig) |
-| **HR** | Beitrittsanfragen, Mitgliederverwaltung, Rollenvergabe |
-| **Baumeister** | Gebäude platzieren/bearbeiten/löschen, Gebäude-Upgrades |
-| **Builder** | Baustellenarbeit und Baustellenoptionen (außer Abbrechen) |
-| **Händler** | Dorfbewohner-Handel mit Punkteausgaben |
-| **Trainer** | Dorfbewohner-Upgrades/Verwaltung mit Punkteausgaben |
-| **Member** | Standardrolle für Nicht-Gründer |
-
-Rollen außer Gründer/Member werden über den Upgrade-Bereich `Rollen freischalten` freigeschaltet.
-
----
-
-## Upgrade-System
-
-Dörfer sammeln Punkte durch Aktivitäten und können diese für Upgrades ausgeben:
-
-| Upgrade | Beschreibung |
-|---|---|
-| Grenzerweiterung | Mehr Baufläche |
-| Mehr Mitglieder | Größere Spielerzahl |
-| Mehr Dorfbewohner | Höhere Bewohnerkapazität |
-| Produktionsgeschwindigkeit | Schnellere Produktion |
-| Neue Berufe | Zusätzliche Dorfbewohner-Arten |
-| Steuern | Einnahmen von Besuchern |
-| Gebäude freischalten | Neue Gebäudetypen |
-| Verteidigung | Verbesserte Anlagen |
-| Rollen-Freischaltungen | Rollenspezifische Berechtigungen |
-
----
-
-## Punkte-System
-
-| Aktion | Punkte |
-|---|---|
-| Block platzieren/abbauen | 1 |
-| Mob töten | 5 |
-| Gebäude fertigstellen | 50 |
-| Handel | 3 |
-| Dorfbewohner-Produktion | 2 |
-
----
-
-## Persistenz
-
-Alle Dorf-Daten (Grenzen, Mitglieder, Gebäude, bekannte Dörfer) werden beim Speichern in YAML-Dateien persistiert. Nach einem Serverneustart werden entdeckte Dörfer aus den gespeicherten `known-villages`-Einträgen wiederhergestellt – Spieler müssen bereits entdeckte Dörfer **nicht erneut entdecken**.
-
----
-
-## Light-System
-
-Das Plugin kann für jede Welt eine maximale Lichtstufe definieren. Spieler ohne Dorf sehen den `default-max-light-level`. Spieler in einem Dorf nutzen die konfigurierten Lichtregeln ihres Dorfes.
-
----
-
-## Relationensystem
-
-Dörfer können Beziehungen zueinander aufbauen:
-
-| Relation | Beschreibung |
-|---|---|
-| Freundschaft | Gegenseitige Lichtunterstützung und Nähe |
-| Handel | Markiert Handelsbeziehungen |
-| Krieg | Markiert feindliche Dörfer |
-| Durchgangssperre | Sperrt Gebiete zwischen Dörfern |
-
-Beziehungen werden über das Dorf-Menü verwaltet.
-
----
-
-## GUI-Flows
-
-- **Gebäudedetail**: Whitelist per Rechtsklick toggeln, Linksklick öffnet Whitelist-Untermenü.
-- **Gebäude-Schild**: Aktuelle Vorlage wird im Chat klickbar angezeigt; Abbrechen ist klickbar.
-- **Schild einblenden**: Berücksichtigt den zuletzt verschobenen Schild-Standort; fragt bei Blockersetzung per Klick-Bestätigung nach.
-- **Baumenü**: Admins (`village.admin`) erhalten einen Button für sofortiges Fertigstellen.
-- **Hauptmenü**: `Level & Fortschritt` wurde in `Quests` umbenannt (6×9-Übersicht).
-
----
-
-## Gebäudemenü & Kategorisierung
-
-Das Gebäudemenü ist hierarchisch und vollständig konfigurierbar. Kategorien und Gebäude werden in `config/buildings.yml` unter `menu_categories` definiert:
-
-```yaml
-menu_categories:
-  - name: "Allgemeine Gebäude"
-    items: [lantern, harbor, bridge]
-  - name: "Dorfzentrum"
-    items: [village_center]
-  - name: "Wohnen"
-    items: [barracks, house]
-```
-
-**Wichtige Regeln:**
-- `village_center` (Dorfbrunnen) ist einzigartig und erscheint nicht als auswählbares Bauobjekt. Es kann **nur einen** Dorfbrunnen geben.
-- Upgrades sind keine eigenständigen Gebäude und sollten unter dem jeweiligen Gebäudeeintrag konfiguriert werden.
-- Gebäude ohne Schematic (z.B. Pfade) mit `requires_schematic: false` markieren.
-
----
-
-## Schematic-Namenskonvention
-
-Neue `.schem`-Dateien werden beim Speichern automatisch mit einer dreistelligen Varianten-Nummer versehen: `<name>_001.schem`, `<name>_002.schem`, ...
-
-Beim Registrieren mit `/village schematic register <name>` wird der **Basisname ohne** `_###` erwartet (z.B. `house` für `house_001.schem`).
-
----
-
-## Konfigurationsmigration (Auto-Backup)
-
-Das Plugin prüft beim Laden die `config-version` in den Konfigurationsdateien. Bei einer älteren Version wird die Datei automatisch in `%PLUGIN_FOLDER%/config_backups/<timestamp>/` gesichert und durch die Default-Ressource ersetzt (falls vorhanden).
-
-Um die Versionierung manuell zu setzen, füge `config-version: 1` in `config.yml` oder `config/buildings.yml` ein.
-
----
-
-## Benachrichtigungen
-
-Beim Kauf von Dorf-Upgrades und Rollen werden neben dem Käufer alle online befindlichen Dorf-Mitglieder informiert. Dies erleichtert die Koordination.
-
----
-
-## Pfade
-
-Pfade sind keine klassischen Schematics, sondern werden durch Ablaufen erstellt. Sie sind standardmäßig 3 Blöcke breit und bilden einen gewichteten Graphen für Villager-Routing.
-
-**Path-Upgrades** skalieren mit dem Upgrade-Level (konfigurierbar in `config/buildings.yml` unter `path.speed_effect`):
-
-| Parameter | Beschreibung |
-|---|---|
-| `width_upgradeable` | Ob die Breite mit Level skaliert |
-| `max_width` | Maximale Breite |
-| `amplifier_per_level` | Speed-Bonus-Zuwachs pro Level |
-| `max_amplifier` | Maximaler Speed-Bonus |
-| `duration_after_leave_ticks_per_level` | Nachlauf-Dauer pro Level |
+Siehe [`project-docs/TEST.md`](project-docs/TEST.md) für interne Testfälle und Server-Setup.

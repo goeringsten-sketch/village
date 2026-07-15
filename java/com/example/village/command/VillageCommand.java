@@ -32,12 +32,15 @@ import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -57,6 +60,7 @@ import org.locationtech.jts.geom.LinearRing;
 import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.operation.union.CascadedPolygonUnion;
 import com.example.village.util.BorderGeometryUtil;
+import com.example.village.model.VillageJoinRequest;
 
 public final class VillageCommand implements CommandExecutor, TabCompleter {
 
@@ -101,23 +105,37 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Konsolen-Reload: /v reload ist auch ohne eingeloggten Spieler erlaubt
-        if (!(sender instanceof Player)) {
-            if (args.length >= 1 && "reload".equalsIgnoreCase(args[0])) {
-                if (!sender.hasPermission("village.admin")) {
-                    sender.sendMessage(MessageUtil.color(configManager.message("no-permission")));
-                    return true;
+        if (args.length > 0) {
+            String sub = args[0].toLowerCase();
+            if (!(sender instanceof Player)) {
+                switch (sub) {
+                    case "reload" -> {
+                        handleReload(sender);
+                        return true;
+                    }
+                    case "admin" -> {
+                        handleAdmin(sender, args);
+                        return true;
+                    }
+                    case "delete", "loeschen" -> {
+                        handleDelete(sender, args);
+                        return true;
+                    }
+                    case "list", "liste" -> {
+                        handleList(sender);
+                        return true;
+                    }
+                    case "info" -> {
+                        handleInfo(sender, args);
+                        return true;
+                    }
+                    default -> {
+                        sender.sendMessage(MessageUtil.color(configManager.message("player-only")));
+                        return true;
+                    }
                 }
-                if (plugin.getDebugConfigManager() != null) {
-                    plugin.getDebugConfigManager().load();
-                }
-                configManager.loadAll();
-                if (lightService != null) {
-                    lightService.reloadConfiguration();
-                }
-                sender.sendMessage(MessageUtil.color("&aKonfiguration neu geladen."));
-                return true;
             }
+        } else if (!(sender instanceof Player)) {
             sender.sendMessage(MessageUtil.color(configManager.message("player-only")));
             return true;
         }
@@ -197,6 +215,9 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
             case "umbenennen":
                 handleRename(player, args);
                 break;
+            case "revive":
+                handleRevive(player);
+                break;
             case "menu":
             case "menue":
                 handleMenu(player);
@@ -260,6 +281,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                 break;
             case "cancel":
             case "abbrechen":
+            case "abort":
                 handleCancel(player);
                 break;
             default:
@@ -279,7 +301,28 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleInfo(Player player, String[] args) {
+    private void handleInfo(CommandSender player, String[] args) {
+        if (!(player instanceof Player)) {
+            if (args.length < 2) {
+                msg(player, "&cBitte ein Dorf angeben: /village info <Dorf>");
+                return;
+            }
+            String name = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
+            Village village = villageManager.getVillageByName(name).orElse(null);
+            if (village == null) {
+                msg(player, configManager.message("village-not-found"));
+                return;
+            }
+            String foundedBy = Bukkit.getOfflinePlayer(village.getFounderId()).getName();
+            msg(player, "&6Dorf: &e" + village.getName());
+            msg(player, "&7Gruender: &e" + (foundedBy != null ? foundedBy : "?"));
+            msg(player, "&7Level: &e" + village.getLevel() + "/" + configManager.getMaxLevel());
+            msg(player, "&7Punkte: &e" + village.getPoints());
+            msg(player, "&7Mitglieder: &e" + village.getMembers().size());
+            msg(player, "&7Gebäude: &e" + village.getBuildings().size());
+            return;
+        }
+        Player p = (Player) player;
         Village village;
         if (args.length >= 2) {
             String name = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
@@ -288,32 +331,32 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                 msg(player, configManager.message("village-not-found"));
                 return;
             }
-            if (!village.isMember(player.getUniqueId())
+            if (!village.isMember(p.getUniqueId())
                     && !player.hasPermission("village.admin")
-                    && !villageManager.areVillagesFriendlyForPlayer(player.getUniqueId(), village)) {
+                    && !villageManager.areVillagesFriendlyForPlayer(p.getUniqueId(), village)) {
                 msg(player, configManager.message("no-permission"));
                 return;
             }
         } else {
-            village = villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
+            village = villageManager.getPlayerVillage(p.getUniqueId()).orElse(null);
             if (village == null) {
                 msg(player, "&cDu bist in keinem Dorf.");
                 return;
             }
         }
 
-        boolean isMember = village.isMember(player.getUniqueId());
+        boolean isMember = village.isMember(p.getUniqueId());
         String foundedBy = Bukkit.getOfflinePlayer(village.getFounderId()).getName();
         msg(player, "&6Dorf: &e" + village.getName());
         msg(player, "&7Gruender: &e" + (foundedBy != null ? foundedBy : "?"));
         msg(player, "&7Level: &e" + village.getLevel() + "/" + configManager.getMaxLevel());
         msg(player, "&7Punkte: &e" + village.getPoints());
-        sendClickableLine(player, "&7Mitglieder: &e" + village.getMembers().size() + " ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), isMember ? "Öffne das Dorfmenü." : "Sende eine Beitrittsanfrage.");
+        sendClickableLine(p, "&7Mitglieder: &e" + village.getMembers().size() + " ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), isMember ? "Öffne das Dorfmenü." : "Sende eine Beitrittsanfrage.");
 
         long completedBuildings = village.getBuildings().stream().filter(VillageBuilding::isCompleted).count();
-        sendClickableLine(player, "&7Gebäude: &e" + village.getBuildings().size() + " (&a" + completedBuildings + " fertig&7) ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), "Öffne das Gebäude-Menü des Dorfes.");
+        sendClickableLine(p, "&7Gebäude: &e" + village.getBuildings().size() + " (&a" + completedBuildings + " fertig&7) ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), "Öffne das Gebäude-Menü des Dorfes.");
 
         long friendshipCount = village.getRelations().values().stream()
                 .filter(r -> r.getType() == VillageRelationType.FRIENDSHIP && r.getState() == VillageRelationState.ACTIVE)
@@ -325,26 +368,26 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                 .filter(r -> r.getType() == VillageRelationType.WAR && r.getState() == VillageRelationState.ACTIVE)
                 .count();
         int knownCount = village.getKnownVillageIds().size();
-        sendClickableLine(player, "&7Relationen: &e" + knownCount + " bekannte Dörfer, &e" + friendshipCount + " Freundschaft, &e" + tradeCount + " Handel, &e" + warCount + " Krieg ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), "Öffne die Dorfbeziehungen.");
+        sendClickableLine(p, "&7Relationen: &e" + knownCount + " bekannte Dörfer, &e" + friendshipCount + " Freundschaft, &e" + tradeCount + " Handel, &e" + warCount + " Krieg ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), "Öffne die Dorfbeziehungen.");
 
-        sendClickableLine(player, "&7Upgrades: &e" + village.getUpgrades().size() + " ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), "Öffne das Upgrade-Menü.");
+        sendClickableLine(p, "&7Upgrades: &e" + village.getUpgrades().size() + " ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), "Öffne das Upgrade-Menü.");
 
-        sendClickableLine(player, "&7Dorfbewohner: &e" + village.getVillagers().size() + "/" + village.getMaxVillagers(configManager.getBaseMaxVillagers(), configManager.getUpgradeVillagersPerLevel()) + " ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), "Öffne das Villager-Menü.");
+        sendClickableLine(p, "&7Dorfbewohner: &e" + village.getVillagers().size() + "/" + village.getMaxVillagers(configManager.getBaseMaxVillagers(), configManager.getUpgradeVillagersPerLevel()) + " ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), "Öffne das Villager-Menü.");
 
-        sendClickableLine(player, "&7Fläche: &e" + village.getTotalArea() + " Bloecke ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), "Öffne das Grenzmenü.");
+        sendClickableLine(p, "&7Fläche: &e" + village.getTotalArea() + " Bloecke ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), "Öffne das Grenzmenü.");
 
-        sendClickableLine(player, "&7Offene Quests: &e? ", "&a[Zum Menü]",
-                getVillageActionCommand(player, village, isMember), "Öffne das Quest-Menü.");
+        sendClickableLine(p, "&7Offene Quests: &e? ", "&a[Zum Menü]",
+                getVillageActionCommand(p, village, isMember), "Öffne das Quest-Menü.");
 
-        if (!isMember && villageManager.getPlayerVillage(player.getUniqueId()).isEmpty()) {
-            sendClickableLine(player, "&7Aktion: ", "&a[Beitreten]",
+        if (!isMember && villageManager.getPlayerVillage(p.getUniqueId()).isEmpty()) {
+            sendClickableLine(p, "&7Aktion: ", "&a[Beitreten]",
                     "/village join " + village.getName(), "Klicke zum Senden einer Beitrittsanfrage.");
-        } else if ((villageManager.canManageVillage(village, player.getUniqueId()) || player.hasPermission("village.admin")) && isMember) {
-            sendClickableLine(player, "&7Aktion: ", "&e[Umbenennen]",
+        } else if ((villageManager.canManageVillage(village, p.getUniqueId()) || p.hasPermission("village.admin")) && isMember) {
+            sendClickableLine(p, "&7Aktion: ", "&e[Umbenennen]",
                     "/village rename", "Klicke um den neuen Dorfnamen im Chat einzugeben.");
         }
     }
@@ -356,10 +399,24 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         return "/village join " + village.getName();
     }
 
-    private void handleList(Player player) {
+    private void handleList(CommandSender player) {
+        if (!(player instanceof Player)) {
+            Collection<Village> villages = villageManager.getAllVillages();
+            if (villages.isEmpty()) {
+                msg(player, "&eEs gibt noch keine Doerfer.");
+                return;
+            }
+            msg(player, "&6=== Doerfer ===");
+            for (Village v : villages) {
+                String founder = Bukkit.getOfflinePlayer(v.getFounderId()).getName();
+                msg(player, "&a" + v.getName() + " &7(Level " + v.getLevel() + ", Gruender: " + (founder != null ? founder : "?") + ")");
+            }
+            return;
+        }
+        Player p = (Player) player;
         boolean canSeeAll = player.hasPermission("village.list.all") || player.hasPermission("village.admin");
         Collection<Village> villages = canSeeAll ? villageManager.getAllVillages()
-                : villageManager.getKnownVillagesForPlayer(player.getUniqueId());
+                : villageManager.getKnownVillagesForPlayer(p.getUniqueId());
 
         if (villages.isEmpty()) {
             msg(player, canSeeAll ? "&eEs gibt noch keine Doerfer." : "&eDu hast keine bekannten Dörfer.");
@@ -368,7 +425,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
 
         msg(player, canSeeAll ? "&6=== Doerfer ===" : "&6=== Bekannte Doerfer ===");
         for (Village v : villages) {
-            boolean known = villageManager.isVillageKnownToPlayer(player.getUniqueId(), v);
+            boolean known = villageManager.isVillageKnownToPlayer(p.getUniqueId(), v);
             String founder = Bukkit.getOfflinePlayer(v.getFounderId()).getName();
             
             // Village name with clickable teleport
@@ -402,7 +459,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
             action.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                     new ComponentBuilder(color(hover)).create()));
             
-            player.spigot().sendMessage(nameComponent, levelComponent, action);
+            p.spigot().sendMessage(nameComponent, levelComponent, action);
         }
     }
 
@@ -754,7 +811,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         msg(player, configManager.message("border-preview-start"));
     }
 
-    private void handleDelete(Player player, String[] args) {
+    private void handleDelete(CommandSender player, String[] args) {
         Village village;
         if (args.length >= 2) {
             String villageName = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
@@ -764,7 +821,11 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                 return;
             }
         } else {
-            village = villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
+            if (!(player instanceof Player)) {
+                msg(player, "&cBitte ein Dorf angeben: /village delete <Dorf>");
+                return;
+            }
+            village = villageManager.getPlayerVillage(((Player) player).getUniqueId()).orElse(null);
         }
 
         if (village == null) {
@@ -772,7 +833,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        if (!player.hasPermission("village.admin") && !village.isFounder(player.getUniqueId())) {
+        if (!player.hasPermission("village.admin") && (player instanceof Player && !village.isFounder(((Player) player).getUniqueId()))) {
             msg(player, configManager.message("no-permission"));
             return;
         }
@@ -1045,7 +1106,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         player.spigot().sendMessage(cmdComponent);
     }
 
-    private void handleReload(Player player) {
+    private void handleReload(CommandSender player) {
         if (!player.hasPermission("village.admin")) {
             msg(player, configManager.message("no-permission"));
             return;
@@ -1061,7 +1122,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         msg(player, "&aKonfiguration neu geladen.");
     }
 
-    private void handleAdmin(Player player, String[] args) {
+    private void handleAdmin(CommandSender player, String[] args) {
         if (!player.hasPermission("village.admin")) {
             msg(player, configManager.message("no-permission"));
             return;
@@ -1072,6 +1133,10 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
             msg(player, "&e/village admin setlevel <Dorf> <Level>");
             msg(player, "&e/village admin addpoints <Dorf> <Punkte>");
             msg(player, "&e/village admin money add|remove <Player/all/village:Name> <currency> <Betrag>");
+            msg(player, "&e/village admin bordernames true|false");
+            msg(player, "&e/village admin joinrequests <Dorf>");
+            msg(player, "&e/village admin menu <Dorf>");
+            msg(player, "&e/village admin light addpoi|addregion|addpath ...");
             msg(player, "&e/village admin delete <Dorf>");
             msg(player, "&e/village admin saveall");
             msg(player, "&e/village admin resyncwg");
@@ -1104,6 +1169,24 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                     msg(player, "&cUngueltige Zahl.");
                 }
                 break;
+            case "bordernames":
+                if (args.length < 3) {
+                    msg(player, "&cVerwendung: /village admin bordernames true|false");
+                    return;
+                }
+                if (!"true".equalsIgnoreCase(args[2]) && !"false".equalsIgnoreCase(args[2])) {
+                    msg(player, "&cBitte nutze true oder false.");
+                    return;
+                }
+                boolean enabled = Boolean.parseBoolean(args[2]);
+                configManager.setBorderEntryDebug(enabled);
+                if (plugin.getVillageDiscoveryListener() != null) {
+                    plugin.getVillageDiscoveryListener().clearBorderTracking();
+                }
+                msg(player, enabled
+                        ? "&aBorder-Namen in der Actionbar aktiviert."
+                        : "&cBorder-Namen in der Actionbar deaktiviert.");
+                break;
             case "delete":
                 if (args.length < 3) { msg(player, "&cVerwendung: /village admin delete <Dorf>"); return; }
                 Village v3 = villageManager.getVillageByName(args[2]).orElse(null);
@@ -1113,6 +1196,37 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                 break;
             case "money":
                 handleAdminMoney(player, args);
+                break;
+            case "joinrequests":
+                if (args.length < 3) {
+                    msg(player, "&cVerwendung: /village admin joinrequests <Dorf>");
+                    return;
+                }
+                Village jrVillage = villageManager.getVillageByName(args[2]).orElse(null);
+                if (jrVillage == null) {
+                    msg(player, configManager.message("village-not-found"));
+                    return;
+                }
+                showJoinRequestsOverview(player, jrVillage);
+                break;
+            case "menu":
+                if (args.length < 3) {
+                    msg(player, "&cVerwendung: /village admin menu <Dorf>");
+                    return;
+                }
+                Village menuVillage = villageManager.getVillageByName(args[2]).orElse(null);
+                if (menuVillage == null) {
+                    msg(player, configManager.message("village-not-found"));
+                    return;
+                }
+                if (!(player instanceof Player)) {
+                    msg(player, "&cDas Menue kann nur von einem Spieler geoeffnet werden.");
+                    return;
+                }
+                guiManager.openMainGui((Player) player, menuVillage);
+                break;
+            case "light":
+                handleAdminLight(player, args);
                 break;
             case "saveall":
                 villageManager.saveAll();
@@ -1137,7 +1251,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleAdminMoney(Player player, String[] args) {
+    private void handleAdminMoney(CommandSender player, String[] args) {
         if (args.length < 6) {
             msg(player, "&cVerwendung: /village admin money add|remove <Player/all/village:Name> <currency(global|Dorfname)> <Betrag>");
             return;
@@ -1193,12 +1307,135 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         msg(player, "&aAdmin-Money ausgefuehrt. Betroffene Konten: " + changed);
     }
 
+    private void showJoinRequestsOverview(CommandSender player, Village village) {
+        List<Map.Entry<UUID, VillageJoinRequest>> requests = new ArrayList<>(village.getJoinRequests().entrySet());
+        if (requests.isEmpty()) {
+            msg(player, "&7Keine offenen Beitrittsanfragen fuer &e" + village.getName() + "&7.");
+            return;
+        }
+
+        requests.sort(java.util.Comparator.comparingLong(e -> e.getValue().getRequestedAt()));
+        msg(player, "&6Offene Beitrittsanfragen fuer &e" + village.getName() + "&6:");
+        for (Map.Entry<UUID, VillageJoinRequest> entry : requests) {
+            UUID requesterId = entry.getKey();
+            String requesterName = Bukkit.getOfflinePlayer(requesterId).getName();
+            if (requesterName == null) requesterName = requesterId.toString().substring(0, 8);
+
+            if (!(player instanceof Player)) {
+                msg(player, "&7- &f" + requesterName + " &e[Annehmen: /village joinrequest accept " + village.getId() + " " + requesterId + "] [Ablehnen: /village joinrequest deny " + village.getId() + " " + requesterId + "]");
+                continue;
+            }
+
+            TextComponent accept = new TextComponent(color("&a[Annehmen]"));
+            accept.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                    "/village joinrequest accept " + village.getId() + " " + requesterId));
+            accept.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    new ComponentBuilder(color("&7Anfrage von " + requesterName + " annehmen")).create()));
+
+            TextComponent deny = new TextComponent(color("&c[Ablehnen]"));
+            deny.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                    "/village joinrequest deny " + village.getId() + " " + requesterId));
+            deny.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    new ComponentBuilder(color("&7Anfrage von " + requesterName + " ablehnen")).create()));
+
+            ((Player) player).spigot().sendMessage(
+                    new TextComponent(color("&7- &f" + requesterName + " ")),
+                    accept,
+                    new TextComponent(color(" ")),
+                    deny
+            );
+        }
+    }
+
+    private void handleAdminLight(CommandSender player, String[] args) {
+        if (args.length < 3) {
+            msg(player, "&cVerwendung: /village admin light addpoi|addregion|addpath ...");
+            msg(player, "&7Beispiel: /village admin light addpoi spawn world 0 64 0 50");
+            return;
+        }
+
+        String sub = args[2].toLowerCase();
+        File file = new File(plugin.getDataFolder(), "config/light-limits.yml");
+        if (!file.exists()) {
+            file = new File(plugin.getDataFolder(), "light-limits.yml");
+        }
+        YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+
+        try {
+            switch (sub) {
+                case "addpoi" -> {
+                    if (args.length < 9) {
+                        msg(player, "&cVerwendung: /village admin light addpoi <key> <world> <x> <y> <z> <radius>");
+                        return;
+                    }
+                    String key = args[3];
+                    String world = args[4];
+                    double x = Double.parseDouble(args[5]);
+                    double y = Double.parseDouble(args[6]);
+                    double z = Double.parseDouble(args[7]);
+                    double radius = Double.parseDouble(args[8]);
+                    cfg.set("light-control.points-of-interest." + key + ".world", world);
+                    cfg.set("light-control.points-of-interest." + key + ".x", x);
+                    cfg.set("light-control.points-of-interest." + key + ".y", y);
+                    cfg.set("light-control.points-of-interest." + key + ".z", z);
+                    cfg.set("light-control.points-of-interest." + key + ".radius", radius);
+                    cfg.save(file);
+                    if (lightService != null) lightService.reloadConfiguration();
+                    msg(player, "&aLicht-POI &e" + key + " &ahinzugefuegt.");
+                }
+                case "addregion" -> {
+                    if (args.length < 7) {
+                        msg(player, "&cVerwendung: /village admin light addregion <key> <world> <regionId> <baseRadius>");
+                        return;
+                    }
+                    String key = args[3];
+                    String world = args[4];
+                    String regionId = args[5];
+                    double baseRadius = Double.parseDouble(args[6]);
+                    cfg.set("light-control.worldguard-regions." + key + ".world", world);
+                    cfg.set("light-control.worldguard-regions." + key + ".region-id", regionId);
+                    cfg.set("light-control.worldguard-regions." + key + ".base-radius", baseRadius);
+                    cfg.save(file);
+                    if (lightService != null) lightService.reloadConfiguration();
+                    msg(player, "&aLicht-Region &e" + key + " &ahinzugefuegt.");
+                }
+                case "addpath" -> {
+                    if (args.length < 11) {
+                        msg(player, "&cVerwendung: /village admin light addpath <key> <world> <fromX> <fromZ> <toX> <toZ> <radius>");
+                        return;
+                    }
+                    String key = args[3];
+                    String world = args[4];
+                    double fromX = Double.parseDouble(args[5]);
+                    double fromZ = Double.parseDouble(args[6]);
+                    double toX = Double.parseDouble(args[7]);
+                    double toZ = Double.parseDouble(args[8]);
+                    double radius = Double.parseDouble(args[9]);
+                    cfg.set("light-control.paths." + key + ".world", world);
+                    cfg.set("light-control.paths." + key + ".from.x", fromX);
+                    cfg.set("light-control.paths." + key + ".from.z", fromZ);
+                    cfg.set("light-control.paths." + key + ".to.x", toX);
+                    cfg.set("light-control.paths." + key + ".to.z", toZ);
+                    cfg.set("light-control.paths." + key + ".radius", radius);
+                    cfg.save(file);
+                    if (lightService != null) lightService.reloadConfiguration();
+                    msg(player, "&aLicht-Pfad &e" + key + " &ahinzugefuegt.");
+                }
+                default -> msg(player, "&cUnbekannter Light-Befehl.");
+            }
+        } catch (NumberFormatException e) {
+            msg(player, "&cUngueltige Zahl.");
+        } catch (IOException e) {
+            msg(player, "&cKonnte light-limits.yml nicht speichern: " + e.getMessage());
+        }
+    }
+
     private void handleHelp(Player player) {
         msg(player, "&6=== Dorf-Hilfe ===");
         msg(player, "&e/village &7- Oeffnet das Dorf-Menue");
         msg(player, "&e/village info [Name] &7- Zeigt Dorf-Infos");
         msg(player, "&e/village list &7- Listet alle Doerfer");
-        msg(player, "&e/village tp <Dorf> [Spieler] &7- Teleportiere dich oder einen Spieler zum Dorf");
+        msg(player, "&e/village tp <village_id|Name> [Spieler=self] &7- Teleportiere dich oder einen Spieler zum Dorf");
         msg(player, "&e/village spawn [Spieler] &7- Teleportiert dich oder einen Spieler zum eigenen Dorf");
         msg(player, "&e/village join <Name> &7- Beitrittsanfrage senden");
         msg(player, "&e/village sendmoney|sm <Spieler> <Betrag> &7- Dorfwährung senden");
@@ -1219,6 +1456,8 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         msg(player, "&e/village delete [Name] &7- Löscht dein oder ein benanntes Dorf");
         msg(player, "&e/village rename &7- Starte Dorf-Umbenennung per Chat");
         msg(player, "&e/village rename <Name> &7- Sofort umbenennen");
+        msg(player, "&e/village revive &7- Den zuletzt gestorbenen Dorfbewohner wiederbeleben");
+        msg(player, "&e/v abort &7- Bricht aktuelle Auswahl-/Abbruchaktionen ab");
         msg(player, "&e/village menu &7- Dorf-Menue oeffnen");
         msg(player, "&e/village building list &7- Zeigt Gebäude im Dorf");
         msg(player, "&e/village building remove <Nr> &7- Entfernt ein Gebäude");
@@ -1226,9 +1465,14 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         msg(player, "&e/village building upgrade <Nr> &7- Startet ein Gebäude-Upgrade");
         msg(player, "&e/village building start <Nr> &7- Beginnt den Bau eines Gebäudes");
         msg(player, "&e/village building cancel <Nr> &7- Bricht einen Bauauftrag ab");
+        msg(player, "&e/village schematic list <building_type> &7- Zeigt Schematic-Varianten und den Tool-Button");
         if (player.hasPermission("village.admin")) {
             msg(player, "&c/village admin &7- Admin-Befehle");
             msg(player, "&c/village reload &7- Konfig neu laden");
+            msg(player, "&c/village admin bordernames true|false &7- Actionbar fuer Grenzregionen umschalten");
+            msg(player, "&c/village admin joinrequests <Dorf> &7- Offene Beitrittsanfragen anzeigen");
+            msg(player, "&c/village admin menu <Dorf> &7- Dorfmenü auch als Admin öffnen");
+            msg(player, "&c/village admin light addpoi|addregion|addpath ... &7- Lichtquellen verwalten");
             msg(player, "&c/village schematic tool &7- Schematic-Werkzeug erhalten");
             msg(player, "&c/village schematic pos1 &7- Setzt Auswahl-Pos1");
             msg(player, "&c/village schematic pos2 &7- Setzt Auswahl-Pos2");
@@ -1236,6 +1480,104 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
             msg(player, "&c/village schematic save <name> &7- Speichert die Auswahl");
             msg(player, "&c/village schematic register <name> [name:<display>] [category:<cat>] [perm:<perm>] [icon:<ICON>] [level:<n>] &7- Registriert die Schematic");
         }
+    }
+
+    private void handleRevive(Player player) {
+        Village village = villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
+        if (village == null) {
+            msg(player, configManager.message("village-not-found"));
+            return;
+        }
+        if (!village.isMember(player.getUniqueId()) && !player.hasPermission("village.admin")) {
+            msg(player, configManager.message("no-permission"));
+            return;
+        }
+        if (villagerService == null) {
+            msg(player, "&cVillager-Service ist nicht verfuegbar.");
+            return;
+        }
+        if (!configManager.isVillagerRevivalEnabled()) {
+            msg(player, configManager.message("villager-revive-disabled"));
+            return;
+        }
+        if (!villagerService.isRevivalAvailable(village)) {
+            msg(player, configManager.message("villager-revive-none"));
+            return;
+        }
+
+        long cooldownRemaining = villagerService.getRevivalCooldownRemainingMillis(village);
+        if (cooldownRemaining > 0) {
+            msg(player, configManager.message("villager-revive-cooldown")
+                    .replace("%time%", formatDuration(cooldownRemaining)));
+            return;
+        }
+
+        double cost = villagerService.getRevivalCost(village);
+        String currencyType = configManager.getVillagerRevivalCurrencyType();
+        boolean charged = true;
+        if (cost > 0) {
+            if ("local".equalsIgnoreCase(currencyType)) {
+                if (currencyService == null) {
+                    msg(player, configManager.message("villager-revive-no-economy"));
+                    return;
+                }
+                String currencyId = currencyService.getVillageCurrencyId(village);
+                if (currencyService.getBalance(player.getUniqueId(), currencyId) < cost) {
+                    msg(player, configManager.message("villager-revive-no-money")
+                            .replace("%cost%", formatMoney(cost)));
+                    return;
+                }
+                charged = currencyService.removeBalance(player.getUniqueId(), currencyId, cost);
+            } else {
+                if (vaultHook == null || !vaultHook.isAvailable()) {
+                    msg(player, configManager.message("villager-revive-no-economy"));
+                    return;
+                }
+                if (!vaultHook.has(player, cost)) {
+                    msg(player, configManager.message("villager-revive-no-money")
+                            .replace("%cost%", formatMoney(cost)));
+                    return;
+                }
+                charged = vaultHook.withdraw(player, cost);
+            }
+        }
+
+        if (!charged) {
+            msg(player, configManager.message("villager-revive-no-money")
+                    .replace("%cost%", formatMoney(cost)));
+            return;
+        }
+
+        if (villagerService.reviveLastDeadVillager(village)) {
+            msg(player, configManager.message("villager-revive-success")
+                    .replace("%cost%", formatMoney(cost)));
+        } else {
+            if (cost > 0) {
+                if ("local".equalsIgnoreCase(currencyType) && currencyService != null) {
+                    currencyService.addBalance(player.getUniqueId(), currencyService.getVillageCurrencyId(village), cost);
+                } else if (vaultHook != null && vaultHook.isAvailable()) {
+                    vaultHook.deposit(player, cost);
+                }
+            }
+            msg(player, configManager.message("villager-revive-failed"));
+        }
+    }
+
+    private String formatMoney(double amount) {
+        if (vaultHook != null && vaultHook.isAvailable()) {
+            return vaultHook.format(amount);
+        }
+        return String.format(java.util.Locale.US, "%.2f", amount);
+    }
+
+    private String formatDuration(long millis) {
+        long seconds = Math.max(0L, millis / 1000L);
+        long minutes = seconds / 60L;
+        long remainingSeconds = seconds % 60L;
+        if (minutes <= 0L) {
+            return remainingSeconds + "s";
+        }
+        return minutes + "m " + remainingSeconds + "s";
     }
 
     private void handleVillageSendMoney(Player player, String[] args) {
@@ -1650,7 +1992,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         }
         Village v = opt.get();
         org.bukkit.entity.Player targetPlayer = (sender instanceof org.bukkit.entity.Player) ? (org.bukkit.entity.Player) sender : null;
-        if (args.length >= 3) {
+        if (args.length >= 3 && !"self".equalsIgnoreCase(args[2])) {
             org.bukkit.OfflinePlayer off = Bukkit.getOfflinePlayer(args[2]);
             if (off == null || off.getPlayer() == null) {
                 msg(sender, "&cSpieler nicht gefunden oder nicht online.");
@@ -1674,7 +2016,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
 
     private void handleSpawn(Player sender, String[] args) {
         Player target = sender;
-        if (args.length >= 2) {
+        if (args.length >= 2 && !"self".equalsIgnoreCase(args[1])) {
             // allow admins to spawn other players
             if (!sender.hasPermission("village.admin")) {
                 msg(sender, configManager.message("no-permission"));
@@ -1746,6 +2088,10 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         }
         if (previewService != null) {
             previewService.clearPreview(player);
+        }
+        if (guiClickListener != null) {
+            guiClickListener.getPendingJobAssignments().remove(player.getUniqueId());
+            guiClickListener.getPendingBedAssignments().remove(player.getUniqueId());
         }
         msg(player, "&eAktion abgebrochen.");
         if (pending != null && pending.getVillage() != null) {
@@ -2396,7 +2742,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                 || !filled.contains(packXZ(x, z - 1));
     }
 
-    private void msg(Player player, String message) {
+    private void msg(CommandSender player, String message) {
         MessageUtil.send(player, configManager.getPrefix(), message);
     }
 
@@ -2562,6 +2908,11 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
                 msg(player, "&6Schematic-Varianten für: &e" + typeKey);
+                TextComponent toolButton = new TextComponent(color("&a[Neues Schematic-Werkzeug]"));
+                toolButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/village schematic tool"));
+                toolButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        new ComponentBuilder(color("&7Klicke, um das Schematic-Werkzeug zu erhalten.")).create()));
+                player.spigot().sendMessage(toolButton);
                 for (String v : vars) {
                     msg(player, " - &e" + v);
                 }
@@ -2707,8 +3058,8 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             List<String> subs = new ArrayList<>(Arrays.asList(
                     "info", "list", "join", "joinrequest", "leave", "invite", "kick",
-                    "promote", "border", "preview", "building", "delete", "rename", "menu", "help", "manage",
-                    "sendmoney", "sm", "balance", "balances", "path"
+                    "promote", "border", "preview", "building", "delete", "rename", "revive", "menu", "help", "manage",
+                    "sendmoney", "sm", "balance", "balances", "path", "abort"
             ));
             if (sender.hasPermission("village.admin")) {
                 subs.add("admin");
@@ -2756,7 +3107,7 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                     }
                     break;
                 case "admin":
-                    for (String s : Arrays.asList("setlevel", "addpoints", "delete", "saveall", "resyncwg", "money")) {
+                    for (String s : Arrays.asList("setlevel", "addpoints", "delete", "saveall", "resyncwg", "money", "bordernames", "joinrequests", "menu", "light")) {
                         if (s.startsWith(prefix)) completions.add(s);
                     }
                     break;
@@ -2796,12 +3147,23 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                     }
                     break;
                 case "tp":
-                case "spawn":
                     for (Village v : villageManager.getAllVillages()) {
                         if (v.getName().toLowerCase().startsWith(prefix)) {
                             completions.add(v.getName());
                         }
                     }
+                    break;
+                case "spawn":
+                    for (Player p : Bukkit.getOnlinePlayers()) {
+                        if (p.getName().toLowerCase().startsWith(prefix)) {
+                            completions.add(p.getName());
+                        }
+                    }
+                    if ("self".startsWith(prefix)) {
+                        completions.add("self");
+                    }
+                    break;
+                case "revive":
                     break;
             }
         } else if (args.length == 3) {
@@ -2814,7 +3176,8 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                     if (r.toLowerCase().startsWith(prefix)) completions.add(r);
                 }
             } else if ("admin".equals(sub)) {
-                if ("setlevel".equals(cmdSub) || "addpoints".equals(cmdSub) || "delete".equals(cmdSub)) {
+                if ("setlevel".equals(cmdSub) || "addpoints".equals(cmdSub) || "delete".equals(cmdSub)
+                        || "joinrequests".equals(cmdSub) || "menu".equals(cmdSub)) {
                     for (Village v : villageManager.getAllVillages()) {
                         if (v.getName().toLowerCase().startsWith(prefix)) {
                             completions.add(v.getName());
@@ -2824,6 +3187,23 @@ public final class VillageCommand implements CommandExecutor, TabCompleter {
                     for (String s : Arrays.asList("add", "remove")) {
                         if (s.startsWith(prefix)) completions.add(s);
                     }
+                } else if ("bordernames".equals(cmdSub)) {
+                    for (String s : Arrays.asList("true", "false")) {
+                        if (s.startsWith(prefix)) completions.add(s);
+                    }
+                } else if ("light".equals(cmdSub)) {
+                    for (String s : Arrays.asList("addpoi", "addregion", "addpath")) {
+                        if (s.startsWith(prefix)) completions.add(s);
+                    }
+                }
+            } else if ("tp".equals(sub)) {
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (p.getName().toLowerCase().startsWith(prefix)) {
+                        completions.add(p.getName());
+                    }
+                }
+                if ("self".startsWith(prefix)) {
+                    completions.add("self");
                 }
             } else if ("building".equals(sub)) {
                 if ("remove".equals(cmdSub) || "movesign".equals(cmdSub) || "upgrade".equals(cmdSub) || "start".equals(cmdSub) || "cancel".equals(cmdSub)) {

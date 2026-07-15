@@ -1,7 +1,35 @@
-# Player-related settings split from config.yml
+# ==============================================================================
+#  Village Plugin - Spieler-Rollen-Konfiguration (players.yml)
+# ==============================================================================
+#  Definiert die freischaltbaren Spieler-Rollen innerhalb eines Dorfes.
+#  Rollen geben Spielern zusätzliche Rechte und Fähigkeiten im Dorf.
+#
+#  HINWEISE:
+#  - Rollen werden durch Kauf im Dorf-Upgrade-Menü freigeschaltet
+#  - Jede Rolle benötigt eine passende Permission-Gruppe im Permissions-Plugin
+#  - Icons sind Bukkit-Material-Namen (GROSSBUCHSTABEN mit Unterstrichen)
+#    → Referenz: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
+#  - Farbcodes für display-name: &0–&9, &a–&f, &l, &m, &n, &o, &r
+# ==============================================================================
 
-# --- Rollen-Upgrades ---
+
+# ─────────────────────────────────────────────────────────────
+# ROLLEN-UPGRADES
+# ─────────────────────────────────────────────────────────────
+# Jede Rolle ist ein benanntes Objekt (Schlüssel beginnt mit role_).
+# Verfügbare Felder pro Rolle:
+#
+#   display-name: "<Farbcode + Name>"   - Anzeigename im GUI und Chat
+#   icon: <Material>                    - Icon im Rollen-Menü (Bukkit-Material-Name)
+#   money-cost:
+#     global: <Dezimalzahl>            - Kosten in globaler Server-Währung (0.0 = kostenlos)
+#     local: <Dezimalzahl>             - Kosten in lokaler Dorfwährung (0.0 = kostenlos)
+#   points-cost: <Ganzzahl>            - Kosten in Dorfpunkten
+#
 role-upgrades:
+
+  # ── Rolle: Human Resources (HR) ──────────────────────────────────
+  # Zuständig für Dorfbewohner-Verwaltung: Rekrutierung, Umbenennung, Entlassung
   role_hr:
     display-name: "&aHR"
     icon: WRITABLE_BOOK
@@ -9,6 +37,9 @@ role-upgrades:
       global: 2000.0
       local: 0.0
     points-cost: 500
+
+  # ── Rolle: Baumeister ─────────────────────────────────────────────
+  # Höchste Baustufe: Schaltet fortschrittliche Gebäude und alle Bauoptionen frei
   role_baumeister:
     display-name: "&aBaumeister"
     icon: BRICKS
@@ -16,6 +47,9 @@ role-upgrades:
       global: 2000.0
       local: 0.0
     points-cost: 500
+
+  # ── Rolle: Builder ────────────────────────────────────────────────
+  # Einfacher Baumeister: Kann Standardgebäude errichten (ohne Spezialgebäude)
   role_builder:
     display-name: "&aBuilder"
     icon: IRON_PICKAXE
@@ -23,6 +57,9 @@ role-upgrades:
       global: 1500.0
       local: 0.0
     points-cost: 350
+
+  # ── Rolle: Händler ────────────────────────────────────────────────
+  # Verwaltet Handelsrouten, Dorftruhen und den Marktplatz
   role_haendler:
     display-name: "&aHaendler"
     icon: EMERALD
@@ -30,6 +67,9 @@ role-upgrades:
       global: 1800.0
       local: 0.0
     points-cost: 400
+
+  # ── Rolle: Trainer ────────────────────────────────────────────────
+  # Verbessert die Skills und Fähigkeiten von Dorfbewohnern (NPC-Levelups)
   role_trainer:
     display-name: "&aTrainer"
     icon: EXPERIENCE_BOTTLE
@@ -37,6 +77,3 @@ role-upgrades:
       global: 1800.0
       local: 0.0
     points-cost: 400
-
-
-

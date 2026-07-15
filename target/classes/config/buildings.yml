@@ -1,198 +1,181 @@
-# Building settings split from config.yml
+# ==============================================================================
+#  Village Plugin - Gebäude-Konfiguration (buildings.yml)
+# ==============================================================================
+#  Definiert alle Gebäudetypen, Kategorien, Baukosten, Validierungsregeln
+#  und globale Gebäude-Engine-Einstellungen.
 #
-# Konzept:
-# - Schematics für Gebäude, optional mit Variationen wie house_001.schem, house_002.schem
-# - Admins können ingame neue Schematics erstellen und ins System integrieren, ohne WorldEdit nutzen zu müssen
-# - Manuelles Bauen über das Gebäudemenü sowie Villager-Bauphasen mit Materialentnahme aus Dorftruhen oder Spielerinventar
-# - Upgrades haben eigene Permissions und können Achievement-Benachrichtigungen oder kommandobasierte Effekte auslösen
-# - Workstationblocks sind pro Gebäude konfigurierbar, inklusive Betten, Kisten, Arbeitsblöcken und Pauseblöcken
-# - Pfade entstehen durch ein Ablaufen, nicht durch Schematics, und bilden einen gewichteten Graphen für Villager-Route
+#  MATERIAL-NAMEN: Bukkit-Enum (GROSSBUCHSTABEN mit Unterstrichen)
+#    → https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
 #
-buildings:
-  types:
-    house:
-      display-name: "&aWohnhaus"
-      description: "Bietet Platz fuer Dorfbewohner"
-      icon: OAK_DOOR
-      villager-capacity: 2
-      cost:
-        global: 200.0
-        local: 0.0
-      required-level: 1
-      max-level: 5
-      upgrade-required-village-level: 2
-      upgrade-required-unlock: "house_bed_expansion"
-      upgrade-cost-per-level:
-        global: 150.0
-        local: 30.0
-      upgrade-points-per-level: 25
-      schematic: "house.schem"
-    farm:
-      display-name: "&aFarm"
-      description: "Produziert Nahrung"
-      icon: WHEAT
-      villager-capacity: 1
-      cost:
-        global: 150.0
-        local: 0.0
-      required-level: 2
-      max-level: 4
-      upgrade-required-village-level: 3
-      upgrade-required-unlock: "farm_composting"
-      upgrade-cost-per-level:
-        global: 200.0
-        local: 40.0
-      upgrade-points-per-level: 30
-      schematic: "farm.schem"
-      workstation-block: FARMLAND
-      workstation-blocks:
-        workstation: FARMLAND
-        workstation_compost: COMPOSTER
-        workstation_mill: CRAFTING_TABLE
-    shop:
-      display-name: "&aGeschaeft"
-      description: "Ermoeglicht Handel"
-      icon: CHEST
-      villager-capacity: 1
-      cost:
-        global: 500.0
-        local: 0.0
-      required-level: 5
-      schematic: "shop.schem"
-      workstation-block: CHEST
-      workstation-blocks:
-        workstation: CHEST
-        storage: BARREL
-    barracks:
-      display-name: "&aKaserne"
-      description: "Bildet Wachen aus"
-      icon: IRON_SWORD
-      villager-capacity: 3
-      cost:
-        global: 800.0
-        local: 0.0
-      required-level: 8
-      schematic: "barracks.schem"
-    watchtower:
-      display-name: "&aWachturm"
-      description: "Erhoeht den Verteidigungsradius"
-      icon: SPYGLASS
-      villager-capacity: 1
-      cost:
-        global: 600.0
-        local: 0.0
-      required-level: 6
-      schematic: "watchtower.schem"
-    wall:
-      display-name: "&aMauer"
-      description: "Schuetzt das Dorf"
-      icon: STONE_BRICKS
-      villager-capacity: 0
-      cost:
-        global: 100.0
-        local: 0.0
-      required-level: 3
-      schematic: "wall.schem"
-    factory:
-      display-name: "&aFabrik"
-      description: "Verarbeitet Rohstoffe"
-      icon: FURNACE
-      villager-capacity: 2
-      cost:
-        global: 1000.0
-        local: 0.0
-      required-level: 10
-      schematic: "factory.schem"
-    storage:
-      display-name: "&aLager"
-      description: "Lagert Items fuer das Dorf"
-      icon: BARREL
-      villager-capacity: 1
-      cost:
-        global: 300.0
-        local: 0.0
-      required-level: 3
-      schematic: "storage.schem"
-    road:
-      display-name: "&aWeg"
-      description: "Verbindet Gebaeude und beschleunigt Dorfbewohner"
-      icon: GRAVEL
-      villager-capacity: 0
-      cost:
-        global: 50.0
-        local: 0.0
-      required-level: 1
-      schematic: "road.schem"
-    library:
-      display-name: "&aBibliothek"
-      description: "Erforscht neue Technologien"
-      icon: BOOKSHELF
-      villager-capacity: 2
-      cost:
-        global: 750.0
-        local: 0.0
-      required-level: 7
-      schematic: "library.schem"
-    tavern:
-      display-name: "&aTaverne"
-      description: "Erhoeht die Moral der Dorfbewohner"
-      icon: BREWING_STAND
-      villager-capacity: 1
-      cost:
-        global: 400.0
-        local: 0.0
-      required-level: 4
-      schematic: "tavern.schem"
-    marketplace:
-      display-name: "&aMarktplatz"
-      description: "Zentraler Handelsplatz"
-      icon: EMERALD
-      villager-capacity: 3
-      cost:
-        global: 1200.0
-        local: 0.0
-      required-level: 12
-      schematic: "marketplace.schem"
-
-# =============================================================
-#  NEUE GEBÄUDE-DEFINITIONEN (area-/WB-basiert, kein Schematic)
+#  ──────────────────────────────────────────────────────────────────────────
+#  GEBÄUDE-FELD-REFERENZ (gilt für alle Gebäude-Einträge):
 #
-#  validation_mode: schematic   -> BuildingService + WorldEdit
-#  validation_mode: block_check -> Plugin prüft Blöcke im Bereich
+#   name: "<Text>"               - Anzeigename im Gebäude-GUI
+#   description: "<Text>"        - Kurzbeschreibung (Tooltip im Menü)
+#   permission: "<node>"         - Permission zum Bauen dieses Gebäudes
+#   icon: <Material>             - Icon im Gebäude-Menü
+#   show_in_menu: true|false     - Ob das Gebäude im Bau-Menü angezeigt wird
+#   requires_village_level: <Z>  - Mindest-Dorflevel zum Bauen
 #
-#  build_cost:
-#    items: { STONE: 32 }
-#    money: 100            # globale Währung über Vault
-#    money_local: 50       # optional: lokale Dorfcurrency
-# =============================================================
+#   validation_mode: <Modus>     - Wie das Gebäude validiert wird:
+#       schematic    → Plugin vergleicht mit WorldEdit-Schematic-Datei
+#       block_check  → Plugin prüft bestimmte Blöcke im Bereich
+#
+#   schematic: "<datei.schem>"   - Schematic-Dateiname (nur bei validation_mode: schematic)
+#
+#   required_blocks:             - Pflichtblöcke im Bereich (block_check)
+#     <Material>: <Mindestanzahl>
+#
+#   required_block_percentage:   - Prozentuale Mindestabdeckung eines Blocktyps
+#     block: <Material>
+#     percentage: <0-100>
+#
+#   workstation_blocks: [<M>, ..] - Blöcke, die als Arbeitsstation für NPCs gelten
+#                                   (Bukkit-Material-Namen als Liste)
+#
+#   additional_workstation_blocks: - Zusätzliche benannte Arbeitsstationen
+#     <name>:
+#       type: <Material>          - Blocktyp
+#       label: "<Text>"           - Anzeigelabel
+#       required: true|false      - Ob dieser Block vorhanden sein MUSS
+#       count_min: <Zahl>         - Mindestanzahl
+#       count_max: <Zahl>         - Maximalanzahl
+#       public: true|false        - Für alle Spieler zugänglich
+#       villager_accessible: true|false  - NPCs können darauf zugreifen
+#
+#   area:                         - Flächenberechnung des Gebäudes
+#     shape: <Form>               - Mögliche Werte:
+#         circle           → Kreisförmig (min_radius, max_radius)
+#         rectangle        → Rechteckig (min_size "BxH", max_size "BxH")
+#         hollow_structure → Hohlkörper/Gebäude-Innenraum (min/max_interior_volume)
+#     min_radius / max_radius     - (nur bei circle)
+#     min_size / max_size         - (nur bei rectangle, Format: "BreitexTiefe")
+#     min_interior_volume / max_interior_volume - (nur bei hollow_structure)
+#
+#   chest:                        - Truhen-Konfiguration
+#     initial_slots: <9|18|27..>  - Start-Inventarslots (Vielfache von 9)
+#     max_upgradeable_slots: <Z>  - Maximum nach Upgrades
+#     public: true|false          - Für alle Spieler zugänglich
+#     villager_accessible: true|false  - NPCs können zugreifen
+#
+#   villager_slots: <Zahl>        - Anzahl NPC-Arbeitsplätze dieses Gebäudes
+#
+#   passive_effects:              - Passive Boni durch dieses Gebäude
+#     sleep_slots: <Zahl>         - Schlafplätze für NPCs (Betten)
+#
+#   type: <Gebäudetyp>            - Spezialtyp (nur wenn abweichend von standard):
+#       path     → Pfad/Weg (Spieler läuft ihn ab)
+#       area     → Bezirk / Gebietsbereich
+#       outpost  → Außenposten (außerhalb des Dorfgebiets)
+#
+#   parent: <gebäude-key>         - Übergeordnetes Gebäude (muss zuerst gebaut sein)
+#
+#   build_cost:                   - Baukosten
+#     items: { <Material>: <Z> }  - Benötigte Items
+#     money: <Zahl>               - Kosten in globaler Währung
+#     money_local: <Zahl>         - (optional) Kosten in lokaler Dorfwährung
+#
+#   upgrades:                     - Verfügbare Ausbaustufen
+#     <upgrade-key>:
+#       name: "<Text>"
+#       permission: "<node>"
+#       requires_village_level: <Z>
+#       achievement: "<Text>"     - Benachrichtigung beim Freischalten
+#       commands: ["<cmd>", ...]  - Konsolenbefehle beim Freischalten
+#       build_cost: { ... }       - Upgrade-Kosten (wie build_cost)
+#       upgrades_to: <gebäude-key> - Wandelt das Gebäude in einen anderen Typ um
+#
+#   recipes:                      - Produktionsrezepte dieses Gebäudes
+#     <rezept-key>:
+#       inputs: { <Material>: <Z> }  - Benötigte Eingabe-Items
+#       outputs: { <Material>: <Z> } - Produzierte Ausgabe-Items
+#       duration_seconds: <Zahl>     - Produktionsdauer in Sekunden
+#       required_villager_job: <Job> - Benötigter Beruf des NPCs (Großbuchstaben)
+#       required_building_level: <Z> - Mindest-Gebäudestufe
+#
+#  PFAD-SPEZIFISCHE FELDER (type: path):
+#   path:
+#     width: <Zahl>                - Breite des Pfades in Blöcken
+#     width_upgradeable: true|false - Ob die Breite per Upgrade vergrößert werden kann
+#     max_width: <Zahl>            - Maximale Breite nach Upgrades
+#     visualize_border_block: <M>  - Fake-Block zur Visualisierung der Pfadkante
+#     surface_check_mode: <Modus>  - Mögliche Werte: skylight | all
+#     required_surface_block: <M>  - Pflicht-Oberflächenblock (z.B. DIRT_PATH)
+#     required_surface_percentage: <0-100>  - Mindestprozentsatz Pflichtblock
+#     valid_surface_blocks: [<M>,..]  - Erlaubte Oberflächenblöcke
+#     valid_base_blocks: [<M>, ..]    - Erlaubte Untergrundblöcke
+#     speed_effect:                   - Geschwindigkeitseffekt für Spieler auf dem Pfad
+#       amplifier: <0-4>             - Stärke des Effekts (0 = keine Erhöhung, 4 = max)
+#       duration_after_leave_ticks: <Z> - Wie lange der Effekt nach Verlassen anhält
+# ==============================================================================
 
 settings:
+  # Modus für die Oberflächenerkennung bei Pfaden.
+  # Mögliche Werte:
+  #   skylight - Nur Blöcke mit direktem Himmelsicht werden geprüft (empfohlen)
+  #   all      - Alle Blöcke im Bereich werden geprüft (langsamer)
   path_surface_mode: skylight
+
+  # Mindest-Skylight-Level (0–15) für einen Block, um als Pfadoberfläche zu gelten
+  # 1 = minimales Tageslicht genügt; 15 = nur vollständig unbedeckte Blöcke
   path_surface_min_skylight: 1
+
+  # Produktionsbonus pro Gebäude-Tier (Upgradestufe) als Dezimalwert
+  # 0.10 = +10% pro Tier. Bei Tier 3 = +30% Gesamtbonus.
   production_level_bonus_per_tier: 0.10
+
+  # Maximaler Radius in Blöcken, in dem ein NPC eine Truhe zum Befüllen sucht
   villager_fetch_radius: 64
+
+  # Schematic-spezifische Einstellungen (nur für validation_mode: schematic)
+  schematic:
+    foundation-stretch:
+      # Ob das Plugin automatisch Fundamentblöcke unter dem Gebäude platziert
+      enabled: true
+      # Maximale Tiefe des Fundaments in Blöcken
+      max-depth: 8
+      # Material für das automatisch generierte Fundament
+      # Bukkit-Material-Name
+      material: COBBLESTONE
+
+  # Ästhetik-Bewertungs-System: Bewertet Gebäude nach Materialkombinationen
+  aesthetic_scoring:
+    # Ob das Ästhetik-System aktiv ist
+    enabled: true
+    # Mindest-Score für einen Produktionsbonus (0–100)
+    min_score_for_bonus: 61
+    # Score-Grenze, unter der ein Straf-Malus eingreift (0–100)
+    penalty_threshold: 30
+    # Bonus bei mittlerem Score (min_score_for_bonus bis 80) als Dezimalwert
+    mid_bonus: 0.10
+    # Bonus bei hohem Score (über 80) als Dezimalwert (0.20 = +20%)
+    high_bonus: 0.20
+    # Malus bei niedrigem Score (unter penalty_threshold) als Dezimalwert
+    low_penalty: 0.20
+    # Paare von gut kombinierenden Materialien (erhöhen den Score)
+    # Format: [<Material1>, <Material2>]
+    # Beliebig viele Paare möglich
+    material_pairs:
+      - [OAK_LOG, COBBLESTONE]
+      - [BRICKS, DARK_OAK_PLANKS]
 
 # Reihenfolge und sichtbare Ordner im GUI (optional)
 menu_categories:
-  - Allgemeine Gebäude
   - Dorfzentrum
+  - Allgemeine Gebäude
   - Wohnen
-  - Pfade
-  - Bezirke
+  - Pfade & Wege
+  - Produktion & Verarbeitung
+  - Fabrik & Verarbeitung
+  - Handel & Logistik
+  - Wissenschaft & Forschung
+  - Medizin & Apotheke
+  - Zerstreuung & Kultur
+  - Sicherheit & Verteidigung
   - Außenposten
-  - Handel
-  - Produktion
-  - Factory
-  - Zerstreuung
-  - Forschung
-  - Medizin
-  - Sicherheit und Verteidigung
+  - Bezirke & Erweiterungen
 
 categories:
-
-  # -----------------------------------------------------------
-  #  ALLGEMEIN (general)
-  # -----------------------------------------------------------
   general:
     name: "Allgemeine Gebäude"
     permission: "village.building.general"
@@ -206,6 +189,7 @@ categories:
         icon: BELL
         show_in_menu: false
         requires_village_level: 1
+        max_instances: 1
         validation_mode: schematic
         schematic: "dorfzentrum.schem"
         workstation_blocks: [BELL]
@@ -281,6 +265,7 @@ categories:
         permission: "village.building.general.marktplatz"
         icon: EMERALD
         requires_village_level: 2
+        max_instances: 1
         validation_mode: schematic
         schematic: "marktplatz.schem"
         workstation_blocks: [OAK_SIGN]
@@ -340,7 +325,7 @@ categories:
           items: { OAK_LOG: 32, OAK_PLANKS: 64, BARREL: 2 }
           money: 200
 
-      forst:
+      deko_forst:
         name: "Forst"
         description: "Waldgebiet unter freiem Himmel mit Bäumen."
         permission: "village.building.general.forst"
@@ -364,7 +349,7 @@ categories:
           money: 50
           money_local: 20
 
-      acker:
+      deko_acker:
         name: "Acker"
         description: "Anbaufläche mit Wasser und Grasblöcken."
         permission: "village.building.general.acker"
@@ -380,11 +365,11 @@ categories:
           min_size: "3x3"
           max_size: "20x20"
         build_cost:
-          items: { WATER_BUCKET: 1, HOES: 4 }
+          items: { WATER_BUCKET: 1, WOODEN_HOE: 4 }
           money: 30
           money_local: 10
 
-      beet:
+      deko_beet:
         name: "Blumenbeet"
         description: "Pflanzenbeet für Blumen und Pilze."
         permission: "village.building.general.beet"
@@ -403,7 +388,7 @@ categories:
           items: { POPPY: 4, DANDELION: 4 }
           money: 20
 
-      tierzucht:
+      deko_tierzucht:
         name: "Tierzucht"
         description: "Einfriedetes Gebiet für Tiere mit Zäunen und Tor."
         permission: "village.building.general.tierzucht"
@@ -460,6 +445,7 @@ categories:
         permission: "village.building.wohnen.wohnhaus"
         icon: RED_BED
         requires_village_level: 2
+        max_instances: 5
         validation_mode: schematic
         schematic: "wohnhaus.schem"
         workstation_blocks: [WHITE_BED, ORANGE_BED, MAGENTA_BED, LIGHT_BLUE_BED, YELLOW_BED, LIME_BED, PINK_BED, GRAY_BED, LIGHT_GRAY_BED, CYAN_BED, PURPLE_BED, BLUE_BED, BROWN_BED, GREEN_BED, RED_BED, BLACK_BED]
@@ -613,167 +599,6 @@ categories:
   # -----------------------------------------------------------
   #  BEZIRK (district)
   # -----------------------------------------------------------
-  district:
-    name: "Bezirke & Erweiterungen"
-    permission: "village.building.district"
-    icon: BEACON
-    buildings:
-
-      wohngebiet:
-        name: "Wohngebiet"
-        description: "Bezirksbereich zur gesteigerten Expansion."
-        permission: "village.building.district.wohngebiet"
-        icon: WHITE_BED
-        requires_village_level: 3
-        type: area
-        area:
-          shape: rectangle
-          min_size: "10x10"
-          max_size: "40x40"
-        build_cost:
-          items: { OAK_LOG: 64, STONE_BRICKS: 64 }
-          money: 500
-
-  # -----------------------------------------------------------
-  #  AUSSENPOSTEN (outposts)
-  # -----------------------------------------------------------
-  outposts:
-    name: "Außenposten"
-    permission: "village.building.outposts"
-    icon: CAMPFIRE
-    buildings:
-
-      handelsposten:
-        name: "Handelsposten"
-        description: "Außenposten zum Tausch und zur Güterübergabe."
-        permission: "village.building.outposts.handelsposten"
-        icon: EMERALD_BLOCK
-        requires_village_level: 4
-        type: outpost
-        validation_mode: schematic
-        schematic: "handelsposten.schem"
-        outpost:
-          requires_outside_all_villages: true
-        workstation_blocks: [BELL]
-        area:
-          shape: rectangle
-          min_size: "5x5"
-          max_size: "15x15"
-        build_cost:
-          items: { OAK_LOG: 64, STONE_BRICKS: 64, EMERALD: 10 }
-          money: 400
-
-      militaerposten:
-        name: "Militärposten"
-        description: "Militärische Absicherung im Umland."
-        permission: "village.building.outposts.militaerposten"
-        icon: IRON_BLOCK
-        requires_village_level: 5
-        type: outpost
-        validation_mode: schematic
-        schematic: "militaerposten.schem"
-        outpost:
-          requires_outside_all_villages: true
-        workstation_blocks: [BELL]
-        area:
-          shape: rectangle
-          min_size: "5x5"
-          max_size: "15x15"
-        build_cost:
-          items: { STONE_BRICKS: 128, IRON_BLOCK: 1 }
-          money: 500
-
-      forschungsstation:
-        name: "Forschungsstation"
-        description: "Expeditionslager zur Wissenschaft."
-        permission: "village.building.outposts.forschungsstation"
-        icon: LECTERN
-        requires_village_level: 5
-        type: outpost
-        validation_mode: schematic
-        schematic: "forschungsstation.schem"
-        outpost:
-          requires_outside_all_villages: true
-        workstation_blocks: [LECTERN]
-        area:
-          shape: rectangle
-          min_size: "5x5"
-          max_size: "12x12"
-        build_cost:
-          items: { OAK_PLANKS: 64, GLASS: 16 }
-          money: 500
-
-      ausgrabungsstaette:
-        name: "Ausgrabungsstätte"
-        description: "Archäologisches Grabungsfeld."
-        permission: "village.building.outposts.ausgrabungsstaette"
-        icon: DIRT
-        requires_village_level: 4
-        type: outpost
-        validation_mode: block_check
-        required_blocks:
-          DIRT: 16
-        workstation_blocks: [BELL]
-        area:
-          shape: rectangle
-          min_size: "6x6"
-          max_size: "20x20"
-        build_cost:
-          items: { DIRT: 64, COBBLESTONE: 64 }
-          money: 200
-
-  # -----------------------------------------------------------
-  #  HANDEL (trade)
-  # -----------------------------------------------------------
-  trade:
-    name: "Handel & Logistik"
-    permission: "village.building.trade"
-    icon: CHEST
-    buildings:
-
-      shop:
-        name: "Shop"
-        description: "Kauf- und Verkaufsstelle für Dorfbürger."
-        permission: "village.building.trade.shop"
-        icon: CHEST
-        requires_village_level: 2
-        validation_mode: schematic
-        schematic: "shop.schem"
-        workstation_blocks: [CHEST]
-        area:
-          shape: rectangle
-          min_size: "4x4"
-          max_size: "10x10"
-        chest:
-          initial_slots: 27
-          max_upgradeable_slots: 54
-        build_cost:
-          items: { OAK_PLANKS: 32, CHEST: 1 }
-          money: 50
-
-      lager:
-        name: "Großes Lager"
-        description: "Haupthaus für Dorfressourcen."
-        permission: "village.building.trade.lager"
-        icon: BARREL
-        requires_village_level: 3
-        validation_mode: schematic
-        schematic: "lager.schem"
-        workstation_blocks: [BARREL]
-        area:
-          shape: rectangle
-          min_size: "5x5"
-          max_size: "15x15"
-        chest:
-          initial_slots: 54
-          max_upgradeable_slots: 108
-        build_cost:
-          items: { OAK_PLANKS: 64, BARREL: 4 }
-          money: 200
-
-  # -----------------------------------------------------------
-  #  PRODUKTION (production)
-  # -----------------------------------------------------------
   production:
     name: "Produktion & Verarbeitung"
     permission: "village.building.production"
@@ -845,14 +670,14 @@ categories:
         requires_village_level: 4
         validation_mode: block_check
         required_blocks:
-          BEE_HIVE: 1
-        workstation_blocks: [BEE_HIVE]
+          BEEHIVE: 1
+        workstation_blocks: [BEEHIVE]
         area:
           shape: rectangle
           min_size: "3x3"
           max_size: "15x15"
         build_cost:
-          items: { BEE_HIVE: 1, OAK_PLANKS: 16 }
+          items: { BEEHIVE: 1, OAK_PLANKS: 16 }
           money: 150
           money_local: 30
 
@@ -1021,30 +846,75 @@ categories:
             inputs: {}
             outputs: { RAW_COD: 4, RAW_SALMON: 2 }
             duration_seconds: 180
-            required_villager_job: FARMER
+            required_villager_job: FISHER
             required_building_level: 1
 
-      imker:
-        name: "Imker"
-        description: "Bienenstöcke zur Honigproduktion."
-        permission: "village.building.production.imker"
-        icon: HONEYCOMB
-        requires_village_level: 2
-        validation_mode: block_check
-        required_blocks:
-          BEEHIVE: 1
-        workstation_blocks: [BEEHIVE]
-        area:
-          shape: rectangle
-          min_size: "4x4"
-          max_size: "8x8"
-        build_cost:
-          items: { BEEHIVE: 1, OAK_PLANKS: 16 }
-          money: 50
+      # imker wurde als Duplikat von imkerei entfernt (imkerei wurde auf das korrekte Material BEEHIVE korrigiert)
 
   # -----------------------------------------------------------
   #  FACTORY (factory)
   # -----------------------------------------------------------
+
+      steinbruch:
+        name: "Steinbruch"
+        description: "Ein offener Steinbruch für Bergarbeiter. Bietet Platz für Abbauarbeiten."
+        permission: "village.building.production.steinbruch"
+        icon: STONE
+        requires_village_level: 2
+        validation_mode: block_check
+        required_blocks:
+          STONE: 20
+          COBBLESTONE: 20
+        workstation_blocks: [STONE, COBBLESTONE]
+        area:
+          shape: rectangle
+          min_size: "5x5"
+          max_size: "20x20"
+        villager_slots: 2
+        build_cost:
+          items: { IRON_PICKAXE: 2, COBBLESTONE: 64 }
+          money: 100
+
+      baeckerei:
+        name: "Bäckerei"
+        description: "Hier verarbeitet der Bäcker Weizen zu Brot, Keksen und Kuchen."
+        permission: "village.building.production.baeckerei"
+        icon: BREAD
+        requires_village_level: 3
+        validation_mode: schematic
+        schematic: "baeckerei.schem"
+        workstation_blocks: [SMOKER]
+        additional_workstation_blocks:
+          truhe:
+            type: CHEST
+            label: "Zutatenkiste"
+            required: true
+            count_min: 1
+            count_max: 2
+            public: true
+            villager_accessible: true
+        area:
+          shape: rectangle
+          min_size: "5x5"
+          max_size: "10x10"
+        villager_slots: 2
+        build_cost:
+          items: { SMOKER: 1, OAK_PLANKS: 64, BRICKS: 32 }
+          money: 150
+        recipes:
+          brot_backen:
+            inputs: { WHEAT: 3 }
+            outputs: { BREAD: 2 }
+            duration_seconds: 40
+            required_villager_job: BAKER
+            required_building_level: 1
+          kuchen_backen:
+            inputs: { WHEAT: 3, EGG: 1, MILK_BUCKET: 1, SUGAR: 2 }
+            outputs: { CAKE: 1 }
+            duration_seconds: 120
+            required_villager_job: BAKER
+            required_building_level: 1
+
   factory:
     name: "Fabrik & Verarbeitung"
     permission: "village.building.factory"
@@ -1112,13 +982,13 @@ categories:
             inputs: { RAW_IRON: 4, COAL: 2 }
             outputs: { IRON_INGOT: 4 }
             duration_seconds: 80
-            required_villager_job: MERCHANT
+            required_villager_job: BLACKSMITH
             required_building_level: 1
           gold_schmelzen:
             inputs: { RAW_GOLD: 4, COAL: 2 }
             outputs: { GOLD_INGOT: 4 }
             duration_seconds: 80
-            required_villager_job: MERCHANT
+            required_villager_job: BLACKSMITH
             required_building_level: 1
 
       schmiede:
@@ -1147,7 +1017,7 @@ categories:
             inputs: { IRON_INGOT: 3, STICK: 2 }
             outputs: { IRON_PICKAXE: 1 }
             duration_seconds: 120
-            required_villager_job: MERCHANT
+            required_villager_job: BLACKSMITH
             required_building_level: 1
 
       grobschmied:
@@ -1206,84 +1076,54 @@ categories:
   # -----------------------------------------------------------
   #  ZERSTREUUNG (recreation)
   # -----------------------------------------------------------
-  recreation:
-    name: "Zerstreuung & Kultur"
-    permission: "village.building.recreation"
-    icon: BREWING_STAND
+  trade:
+    name: "Handel & Logistik"
+    permission: "village.building.trade"
+    icon: CHEST
     buildings:
 
-      bad:
-        name: "Bad"
-        description: "Badehaus zur Pflege und Entspannung."
-        permission: "village.building.recreation.bad"
-        icon: WATER_BUCKET
-        requires_village_level: 3
-        validation_mode: block_check
-        required_blocks:
-          WATER: 16
-        workstation_blocks: [BELL]
-        area:
-          shape: rectangle
-          min_size: "6x6"
-          max_size: "15x15"
-        build_cost:
-          items: { STONE_BRICKS: 64, WATER_BUCKET: 4 }
-          money: 300
-
-      museum:
-        name: "Museum"
-        description: "Ausstellung dörflicher Kostbarkeiten."
-        permission: "village.building.recreation.museum"
-        icon: GOLDEN_APPLE
-        requires_village_level: 4
-        validation_mode: schematic
-        schematic: "museum.schem"
-        workstation_blocks: [BELL]
-        area:
-          shape: rectangle
-          min_size: "8x8"
-          max_size: "20x20"
-        build_cost:
-          items: { STONE_BRICKS: 128, GOLD_INGOT: 8 }
-          money: 500
-
-      spielplatz:
-        name: "Spielplatz"
-        description: "Erholungsort für den Dorfnachwuchs."
-        permission: "village.building.recreation.spielplatz"
-        icon: OAK_FENCE
-        requires_village_level: 1
-        validation_mode: block_check
-        required_blocks:
-          OAK_FENCE: 12
-        workstation_blocks: [OAK_FENCE]
-        area:
-          shape: rectangle
-          min_size: "6x6"
-          max_size: "12x12"
-        build_cost:
-          items: { OAK_FENCE: 24, OAK_PLANKS: 16 }
-          money: 50
-
-      taverne:
-        name: "Taverne"
-        description: "Erhöht die allgemeine Dorfmoral."
-        permission: "village.building.recreation.taverne"
-        icon: BREWING_STAND
+      shop:
+        name: "Shop"
+        description: "Kauf- und Verkaufsstelle für Dorfbürger."
+        permission: "village.building.trade.shop"
+        icon: CHEST
         requires_village_level: 2
         validation_mode: schematic
-        schematic: "taverne.schem"
-        workstation_blocks: [BREWING_STAND]
+        schematic: "shop.schem"
+        workstation_blocks: [CHEST]
         area:
           shape: rectangle
-          min_size: "6x6"
-          max_size: "12x12"
+          min_size: "4x4"
+          max_size: "10x10"
+        chest:
+          initial_slots: 27
+          max_upgradeable_slots: 54
         build_cost:
-          items: { BREWING_STAND: 1, OAK_PLANKS: 64 }
-          money: 150
+          items: { OAK_PLANKS: 32, CHEST: 1 }
+          money: 50
+
+      lager:
+        name: "Großes Lager"
+        description: "Haupthaus für Dorfressourcen."
+        permission: "village.building.trade.lager"
+        icon: BARREL
+        requires_village_level: 3
+        validation_mode: schematic
+        schematic: "lager.schem"
+        workstation_blocks: [BARREL]
+        area:
+          shape: rectangle
+          min_size: "5x5"
+          max_size: "15x15"
+        chest:
+          initial_slots: 54
+          max_upgradeable_slots: 108
+        build_cost:
+          items: { OAK_PLANKS: 64, BARREL: 4 }
+          money: 200
 
   # -----------------------------------------------------------
-  #  FORSCHUNG (research)
+  #  PRODUKTION (production)
   # -----------------------------------------------------------
   research:
     name: "Wissenschaft & Forschung"
@@ -1331,6 +1171,7 @@ categories:
         permission: "village.building.research.bibliothek"
         icon: BOOKSHELF
         requires_village_level: 3
+        max_instances: 1
         validation_mode: schematic
         schematic: "bibliothek.schem"
         workstation_blocks: [BOOKSHELF]
@@ -1405,6 +1246,86 @@ categories:
   # -----------------------------------------------------------
   #  SICHERHEIT & VERTEIDIGUNG (defense)
   # -----------------------------------------------------------
+  recreation:
+    name: "Zerstreuung & Kultur"
+    permission: "village.building.recreation"
+    icon: BREWING_STAND
+    buildings:
+
+      bad:
+        name: "Bad"
+        description: "Badehaus zur Pflege und Entspannung."
+        permission: "village.building.recreation.bad"
+        icon: WATER_BUCKET
+        requires_village_level: 3
+        validation_mode: block_check
+        required_blocks:
+          WATER: 16
+        workstation_blocks: [BELL]
+        area:
+          shape: rectangle
+          min_size: "6x6"
+          max_size: "15x15"
+        build_cost:
+          items: { STONE_BRICKS: 64, WATER_BUCKET: 4 }
+          money: 300
+
+      museum:
+        name: "Museum"
+        description: "Ausstellung dörflicher Kostbarkeiten."
+        permission: "village.building.recreation.museum"
+        icon: GOLDEN_APPLE
+        requires_village_level: 4
+        validation_mode: schematic
+        schematic: "museum.schem"
+        workstation_blocks: [BELL]
+        area:
+          shape: rectangle
+          min_size: "8x8"
+          max_size: "20x20"
+        build_cost:
+          items: { STONE_BRICKS: 128, GOLD_INGOT: 8 }
+          money: 500
+
+      spielplatz:
+        name: "Spielplatz"
+        description: "Erholungsort für den Dorfnachwuchs."
+        permission: "village.building.recreation.spielplatz"
+        icon: OAK_FENCE
+        requires_village_level: 1
+        validation_mode: block_check
+        required_blocks:
+          OAK_FENCE: 12
+        workstation_blocks: [OAK_FENCE]
+        area:
+          shape: rectangle
+          min_size: "6x6"
+          max_size: "12x12"
+        build_cost:
+          items: { OAK_FENCE: 24, OAK_PLANKS: 16 }
+          money: 50
+
+      taverne:
+        name: "Taverne"
+        description: "Erhöht die allgemeine Dorfmoral."
+        permission: "village.building.recreation.taverne"
+        icon: BREWING_STAND
+        requires_village_level: 2
+        max_instances: 1
+        validation_mode: schematic
+        schematic: "taverne.schem"
+        workstation_blocks: [BREWING_STAND]
+        area:
+          shape: rectangle
+          min_size: "6x6"
+          max_size: "12x12"
+        build_cost:
+          items: { BREWING_STAND: 1, OAK_PLANKS: 64 }
+          money: 150
+
+  # -----------------------------------------------------------
+  #  FORSCHUNG (research)
+  # -----------------------------------------------------------
   defense:
     name: "Sicherheit & Verteidigung"
     permission: "village.building.defense"
@@ -1468,6 +1389,7 @@ categories:
         permission: "village.building.defense.turm"
         icon: STONE_BRICKS
         requires_village_level: 2
+        max_instances: 1
         validation_mode: schematic
         schematic: "turm.schem"
         workstation_blocks: [BELL]
@@ -1517,3 +1439,115 @@ categories:
         build_cost:
           items: { STONE_BRICKS: 64, IRON_BARS: 16 }
           money: 300
+  outposts:
+    name: "Außenposten"
+    permission: "village.building.outposts"
+    icon: CAMPFIRE
+    buildings:
+
+      handelsposten:
+        name: "Handelsposten"
+        description: "Außenposten zum Tausch und zur Güterübergabe."
+        permission: "village.building.outposts.handelsposten"
+        icon: EMERALD_BLOCK
+        requires_village_level: 4
+        type: outpost
+        validation_mode: schematic
+        schematic: "handelsposten.schem"
+        outpost:
+          requires_outside_all_villages: true
+        workstation_blocks: [BELL]
+        area:
+          shape: rectangle
+          min_size: "5x5"
+          max_size: "15x15"
+        build_cost:
+          items: { OAK_LOG: 64, STONE_BRICKS: 64, EMERALD: 10 }
+          money: 400
+
+      militaerposten:
+        name: "Militärposten"
+        description: "Militärische Absicherung im Umland."
+        permission: "village.building.outposts.militaerposten"
+        icon: IRON_BLOCK
+        requires_village_level: 5
+        type: outpost
+        validation_mode: schematic
+        schematic: "militaerposten.schem"
+        outpost:
+          requires_outside_all_villages: true
+        workstation_blocks: [BELL]
+        area:
+          shape: rectangle
+          min_size: "5x5"
+          max_size: "15x15"
+        build_cost:
+          items: { STONE_BRICKS: 128, IRON_BLOCK: 1 }
+          money: 500
+
+      forschungsstation:
+        name: "Forschungsstation"
+        description: "Expeditionslager zur Wissenschaft."
+        permission: "village.building.outposts.forschungsstation"
+        icon: LECTERN
+        requires_village_level: 5
+        type: outpost
+        validation_mode: schematic
+        schematic: "forschungsstation.schem"
+        outpost:
+          requires_outside_all_villages: true
+        workstation_blocks: [LECTERN]
+        area:
+          shape: rectangle
+          min_size: "5x5"
+          max_size: "12x12"
+        build_cost:
+          items: { OAK_PLANKS: 64, GLASS: 16 }
+          money: 500
+
+      ausgrabungsstaette:
+        name: "Ausgrabungsstätte"
+        description: "Archäologisches Grabungsfeld."
+        permission: "village.building.outposts.ausgrabungsstaette"
+        icon: DIRT
+        requires_village_level: 4
+        type: outpost
+        validation_mode: block_check
+        required_blocks:
+          DIRT: 16
+        workstation_blocks: [BELL]
+        area:
+          shape: rectangle
+          min_size: "6x6"
+          max_size: "20x20"
+        build_cost:
+          items: { DIRT: 64, COBBLESTONE: 64 }
+          money: 200
+
+  # -----------------------------------------------------------
+  #  HANDEL (trade)
+  # -----------------------------------------------------------
+  district:
+    name: "Bezirke & Erweiterungen"
+    permission: "village.building.district"
+    icon: BEACON
+    buildings:
+
+      wohngebiet:
+        name: "Wohngebiet"
+        description: "Bezirksbereich zur gesteigerten Expansion."
+        permission: "village.building.district.wohngebiet"
+        icon: WHITE_BED
+        requires_village_level: 3
+        type: area
+        area:
+          shape: rectangle
+          min_size: "10x10"
+          max_size: "40x40"
+        build_cost:
+          items: { OAK_LOG: 64, STONE_BRICKS: 64 }
+          money: 500
+
+  # -----------------------------------------------------------
+  #  AUSSENPOSTEN (outposts)
+  # -----------------------------------------------------------

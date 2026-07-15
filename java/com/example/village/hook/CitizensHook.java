@@ -3,6 +3,7 @@ package com.example.village.hook;
 import com.example.village.model.CustomVillager;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
+import net.citizensnpcs.trait.SkinTrait;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -65,6 +66,9 @@ public final class CitizensHook {
                         key, PersistentDataType.STRING, villager.getId().toString());
             }
 
+            // Persist custom villager ID in Citizens NPC data
+            npc.data().setPersistent("village-villager-id", villager.getId().toString());
+
             return npcId;
         } catch (Exception ex) {
             Bukkit.getLogger().warning("Citizens NPC konnte nicht erstellt werden: " + ex.getMessage());
@@ -105,8 +109,8 @@ public final class CitizensHook {
         NPC npc = CitizensAPI.getNPCRegistry().getById(npcId);
         if (npc == null) return;
 
-        // Skin-Trait wird nicht verwendet, um Kompilierungsfehler zu vermeiden
-        // TODO: Skin-Trait später hinzufügen, wenn Citizens verfügbar ist
+        SkinTrait skinTrait = npc.getOrAddTrait(SkinTrait.class);
+        skinTrait.setSkinName(skinName);
     }
 
     /**
@@ -137,6 +141,20 @@ public final class CitizensHook {
         NPC npc = CitizensAPI.getNPCRegistry().getById(npcId);
         if (npc != null && npc.isSpawned()) {
             return npc.getEntity().getLocation();
+        }
+        return null;
+    }
+
+    /**
+     * Returns the spawned entity for an NPC id, or null.
+     */
+    public org.bukkit.entity.Entity getNpcEntity(int npcId) {
+        if (!isAvailable() || npcId < 0) {
+            return null;
+        }
+        NPC npc = CitizensAPI.getNPCRegistry().getById(npcId);
+        if (npc != null && npc.isSpawned()) {
+            return npc.getEntity();
         }
         return null;
     }

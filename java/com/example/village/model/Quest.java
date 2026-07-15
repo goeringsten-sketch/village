@@ -29,6 +29,9 @@ public class Quest {
     private UUID assignedPlayerId;
     private boolean isCompleted;
     private int priority;  // 1-5
+    private String objectiveType;
+    private int objectiveCount;
+    private Map<String, Integer> requiredItems;
 
     public Quest(String questId, String title) {
         this.questId = questId;
@@ -47,6 +50,9 @@ public class Quest {
         this.isCompleted = false;
         this.priority = 3;
         this.startTime = System.currentTimeMillis();
+        this.objectiveType = "";
+        this.objectiveCount = 1;
+        this.requiredItems = new HashMap<>();
     }
 
     // Getters & Setters
@@ -103,6 +109,18 @@ public class Quest {
     public long getStartTime() { return startTime; }
     public long getDeadline() { return deadline; }
     public void setDeadline(long deadline) { this.deadline = deadline; }
+
+    public String getObjectiveType() { return objectiveType; }
+    public void setObjectiveType(String objectiveType) {
+        this.objectiveType = objectiveType != null ? objectiveType : "";
+    }
+    public int getObjectiveCount() { return objectiveCount; }
+    public void setObjectiveCount(int objectiveCount) { this.objectiveCount = Math.max(1, objectiveCount); }
+
+    public Map<String, Integer> getRequiredItems() { return requiredItems; }
+    public void addRequiredItem(String material, int amount) {
+        requiredItems.put(material, requiredItems.getOrDefault(material, 0) + amount);
+    }
 
     public boolean isExpired() {
         return deadline > 0 && System.currentTimeMillis() > deadline;

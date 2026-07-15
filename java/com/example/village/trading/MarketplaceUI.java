@@ -190,7 +190,25 @@ public class MarketplaceUI implements TradingUI {
             
             if (preferredCurrency == CurrencyType.LOCAL) {
                 // Nur Käufer aus gleichem Dorf können mit lokal zahlen
-                // TODO: Check if buyer is in same village
+                boolean sameVillage = false;
+                try {
+                    com.example.village.VillagePlugin plugin = org.bukkit.plugin.java.JavaPlugin.getPlugin(com.example.village.VillagePlugin.class);
+                    if (plugin.getVillageManager() != null) {
+                        String villageUUID = localCurrencyManager.getVillageUUID();
+                        com.example.village.model.Village village = plugin.getVillageManager()
+                                .getVillage(UUID.fromString(villageUUID)).orElse(null);
+                        if (village != null && village.isMember(buyer.getUniqueId())) {
+                            sameVillage = true;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Fallback
+                }
+                
+                if (!sameVillage) {
+                    result.addError("Nur Dorfmitglieder können mit lokaler Währung bezahlen.");
+                    return result;
+                }
                 
                 double balance = localCurrencyManager.getBalance(buyer.getUniqueId());
                 if (balance < totalCost) {

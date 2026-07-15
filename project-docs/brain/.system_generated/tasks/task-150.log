@@ -1,0 +1,156 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< com.example:village >-------------------------
+[INFO] Building Village 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ village ---
+[INFO] Deleting C:\Users\Sten\Desktop\village\target
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ village ---
+[INFO] Copying 32 resources from resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ village ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 150 source files with javac [debug target 21] to target\classes
+[WARNING] Systemmodulpfad ist nicht zusammen mit -source 21 festgelegt
+  Wenn Sie den Speicherort der Systemmodule nicht festlegen, kann dies zu Klassendateien f�hren, die auf JDK 21 nicht ausgef�hrt werden k�nnen
+    --release 21 wird anstelle von -source 21 -target 21 empfohlen, weil dadurch der Speicherort der Systemmodule automatisch festgelegt wird
+[INFO] /C:/Users/Sten/Desktop/village/java/com/example/village/command/TradeCommand.java: Einige Eingabedateien verwenden oder �berschreiben eine veraltete API.
+[INFO] /C:/Users/Sten/Desktop/village/java/com/example/village/command/TradeCommand.java: Wiederholen Sie die Kompilierung mit -Xlint:deprecation, um Details zu erhalten.
+[INFO] /C:/Users/Sten/Desktop/village/java/com/example/village/hook/VaultHook.java: Einige Eingabedateien verwenden nicht gepr�fte oder unsichere Vorg�nge.
+[INFO] /C:/Users/Sten/Desktop/village/java/com/example/village/hook/VaultHook.java: Wiederholen Sie die Kompilierung mit -Xlint:unchecked, um Details zu erhalten.
+[INFO] 
+[INFO] --- resources:3.4.0:testResources (default-testResources) @ village ---
+[INFO] skip non existing resourceDirectory C:\Users\Sten\Desktop\village\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ village ---
+[INFO] Changes detected - recompiling the module! :dependency
+[INFO] Compiling 6 source files with javac [debug target 21] to target\test-classes
+[WARNING] Systemmodulpfad ist nicht zusammen mit -source 21 festgelegt
+  Wenn Sie den Speicherort der Systemmodule nicht festlegen, kann dies zu Klassendateien f�hren, die auf JDK 21 nicht ausgef�hrt werden k�nnen
+    --release 21 wird anstelle von -source 21 -target 21 empfohlen, weil dadurch der Speicherort der Systemmodule automatisch festgelegt wird
+[INFO] 
+[INFO] --- surefire:3.5.4:test (default-test) @ village ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.example.village.building.BlockCheckValidatorStructureTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.120 s -- in com.example.village.building.BlockCheckValidatorStructureTest
+[INFO] Running com.example.village.building.BuildingConfigDorfzentrumTest
+[ERROR] Tests run: 15, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 0.247 s <<< FAILURE! -- in com.example.village.building.BuildingConfigDorfzentrumTest
+[ERROR] com.example.village.building.BuildingConfigDorfzentrumTest.menuCategories_containsDorfzentrumCategory -- Time elapsed: 0.039 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 'Dorfzentrum' muss in menu_categories aufgef�hrt sein ==> expected: <true> but was: <false>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
+	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
+	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
+	at com.example.village.building.BuildingConfigDorfzentrumTest.menuCategories_containsDorfzentrumCategory(BuildingConfigDorfzentrumTest.java:181)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1612)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1612)
+
+[ERROR] com.example.village.building.BuildingConfigDorfzentrumTest.dorfzentrum_showInMenuIsFalse -- Time elapsed: 0.002 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: dorfzentrum muss show_in_menu: false haben ==> expected: <false> but was: <true>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertFalse.failNotFalse(AssertFalse.java:63)
+	at org.junit.jupiter.api.AssertFalse.assertFalse(AssertFalse.java:36)
+	at org.junit.jupiter.api.Assertions.assertFalse(Assertions.java:239)
+	at com.example.village.building.BuildingConfigDorfzentrumTest.dorfzentrum_showInMenuIsFalse(BuildingConfigDorfzentrumTest.java:39)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1612)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1612)
+
+[INFO] Running com.example.village.building.DorfzentrumBuildingModelTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.093 s -- in com.example.village.building.DorfzentrumBuildingModelTest
+[INFO] Running com.example.village.currency.CurrencyConverterTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.example.village.currency.CurrencyConverterTest
+[INFO] Running com.example.village.currency.LocalCurrencyManagerTest
+Juli 01, 2026 11:52:45 PM com.example.village.currency.LocalCurrencyManager transfer
+INFORMATION: Transferred 30.0 Gold Taler from d9398e8c-081b-465c-8149-79b19caa29c7 to 87c68d7b-6a35-4786-aa3f-81ac86d5aa70
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.055 s -- in com.example.village.currency.LocalCurrencyManagerTest
+[INFO] Running Trading UI Tests
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.trading.MarketplaceUI addOffer
+INFORMATION: Added offer to Kraemer's Laden: Apfel
+Juli 01, 2026 11:52:46 PM com.example.village.trading.MarketplaceUI addOffer
+INFORMATION: Added offer to Kraemer's Laden: Goldbarren
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: GlobalCurrencyManager initialized with PlayerCurrency API
+Juli 01, 2026 11:52:46 PM com.example.village.currency.GlobalCurrencyManager <init>
+INFORMATION: PlayerCurrency plugin not found - using local in-memory currency fallback.
+Juli 01, 2026 11:52:46 PM com.example.village.trading.MarketplaceUI addOffer
+INFORMATION: Added offer to Dual-Shop: Karotten
+Juli 01, 2026 11:52:46 PM com.example.village.trading.MarketplaceUI addOffer
+INFORMATION: Added offer to Dual-Shop: Netherstern
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.046 s -- in Trading UI Tests
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   BuildingConfigDorfzentrumTest.dorfzentrum_showInMenuIsFalse:39 dorfzentrum muss show_in_menu: false haben ==> expected: <false> but was: <true>
+[ERROR]   BuildingConfigDorfzentrumTest.menuCategories_containsDorfzentrumCategory:181 'Dorfzentrum' muss in menu_categories aufgef�hrt sein ==> expected: <true> but was: <false>
+[INFO] 
+[ERROR] Tests run: 62, Failures: 2, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  8.956 s
+[INFO] Finished at: 2026-07-01T23:52:46+02:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project village: There are test failures.
+[ERROR] 
+[ERROR] See C:\Users\Sten\Desktop\village\target\surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

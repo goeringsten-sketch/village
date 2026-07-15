@@ -1,6 +1,48 @@
+# ==============================================================================
+#  Village Plugin - Debugging-Konfiguration (debug.yml)
+# ==============================================================================
+#  Steuert detaillierte Konsolenausgaben (Logs) für verschiedene Subsysteme.
+#
+#  WICHTIG: Alle Debug-Flags im Live-Betrieb auf 'false' setzen!
+#  Aktivierte Debug-Ausgaben können die Server-Performance spürbar beeinträchtigen
+#  und die Konsole mit Informationsmeldungen fluten.
+#
+#  Empfohlener Workflow:
+#    1. Zu debuggendes System aktivieren (z.B. building: true)
+#    2. Aktion im Spiel ausführen und Konsole beobachten
+#    3. Nach der Fehlersuche wieder auf false setzen
+# ==============================================================================
+
 debug:
+  # Master-Schalter: Aktiviert oder deaktiviert den globalen Debug-Modus.
+  # Wenn false, werden alle nachfolgenden Debug-Flags ignoriert.
+  # Mögliche Werte: true | false
   enabled: false
+
+  # Erstellt automatisch Backups aller Konfigurationsdateien vor Änderungen
+  # oder Plugin-Updates. Backups werden im Plugin-Datenordner gespeichert.
+  # Mögliche Werte: true | false
   backup-configs: false
+
+  # ──────────────────────────────────────────
+  # SYSTEM-SPEZIFISCHE DEBUG-FLAGS
+  # ──────────────────────────────────────────
+  # Jeder Flag schaltet Logs für ein bestimmtes Subsystem ein.
+  # Alle Werte: true | false
+
+  # Loggt Details beim Platzieren, Validieren und Verarbeiten von Gebäuden.
+  # Zeigt: Schematic-Checks, Block-Validierung, Platzierungskoordinaten
   building: false
+
+  # Loggt Informationen über das Chat-System und Dialoginteraktionen mit NPCs.
+  # Zeigt: Gesendete Nachrichten, Dialogzustände, Klick-Events
   chat: false
+
+  # Loggt Light-Level-Änderungen und Berechnungen des Dunkelmodus-Systems.
+  # Zeigt: Lichtquellen-Updates, Stage-Wechsel, Chunk-Refresh-Vorgänge
+  # (Relevant für Einstellungen in light-limits.yml)
   light: false
+
+  # Loggt Tagesabläufe, State-Wechsel und Interaktionen von NPCs.
+  # Zeigt: Berufsaktivitäten, State-Machine-Zustandsänderungen, KI-Ticker
+  villager: false

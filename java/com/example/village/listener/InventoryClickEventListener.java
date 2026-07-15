@@ -2,6 +2,7 @@ package com.example.village.listener;
 
 import com.example.village.currency.CurrencyType;
 import com.example.village.integration.CurrencyIntegrationManager;
+import com.example.village.service.QuestManager;
 import com.example.village.model.TradeOffer;
 import com.example.village.model.VillagerInventory;
 import com.example.village.trading.MarketplaceUI;
@@ -31,12 +32,17 @@ public class InventoryClickEventListener implements Listener {
 
     private final CurrencyIntegrationManager currencySystem;
     private final Logger logger;
+    private QuestManager questManager;
     private final Map<UUID, TradingUI> activeTradings = Collections.synchronizedMap(new HashMap<>());
     private final Map<UUID, VillagerInventory> villagerInventories = Collections.synchronizedMap(new HashMap<>());
 
     public InventoryClickEventListener(CurrencyIntegrationManager currencySystem, Logger logger) {
         this.currencySystem = Objects.requireNonNull(currencySystem);
         this.logger = Objects.requireNonNull(logger);
+    }
+
+    public void setQuestManager(QuestManager questManager) {
+        this.questManager = questManager;
     }
 
     @EventHandler
@@ -117,6 +123,9 @@ public class InventoryClickEventListener implements Listener {
         TradeResult result = ui.processTrade(player, offer.get(), 1);
         if (result.isSuccess()) {
             player.sendMessage(result.getMessage());
+            if (questManager != null) {
+                questManager.recordTrade(player);
+            }
         } else {
             result.getErrors().forEach(error -> player.sendMessage(ChatColor.RED + error));
         }

@@ -8,7 +8,7 @@ import com.example.village.service.BuildingConfigLoader;
 import com.example.village.service.BuildingService;
 import com.example.village.service.VillageManager;
 import com.example.village.model.BuildingDefinition;
-import com.example.village.model.BuildingType;
+
 import com.example.village.model.CustomVillager;
 import com.example.village.model.UpgradeType;
 import com.example.village.model.Village;
@@ -24,6 +24,7 @@ import com.example.village.util.ItemBuilder;
 import com.example.village.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -42,8 +43,15 @@ public final class GuiManager {
     private final VaultHook vaultHook;
     private final VillageManager villageManager;
     private final Map<UUID, String> buildingSearchQueries = new ConcurrentHashMap<>();
+    /** Tracks building-type keys / "typeKey:tier" upgrade keys not yet acknowledged by a player. */
+    private final java.util.concurrent.ConcurrentHashMap<UUID, java.util.Set<String>> newlyUnlocked =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, Integer> villagerGlowModes = new ConcurrentHashMap<>();  // 0=OFF, 1=TEMP, 2=ON
     private BorderPreviewService previewService;
+
+    private String ui(String path, String fallback) {
+        return configManager.text(path, fallback);
+    }
 
     public GuiManager(VillagePlugin plugin, VillageConfigManager configManager,
                       VaultHook vaultHook, VillageManager villageManager) {
@@ -86,6 +94,90 @@ public final class GuiManager {
         return buildingSearchQueries.getOrDefault(player.getUniqueId(), "");
     }
 
+    // ── Newly-unlocked highlight API ─────────────────────────────────────────
+
+    public boolean isNewlyUnlocked(UUID playerId, String key) {
+        var set = newlyUnlocked.get(playerId);
+        return set != null && set.contains(key);
+    }
+
+    public void acknowledgeItem(UUID playerId, String key) {
+        var set = newlyUnlocked.get(playerId);
+        if (set != null) set.remove(key);
+    }
+
+    public void markNewlyUnlockedForVillage(Village village, int newLevel) {
+        BuildingConfigLoader loader = plugin.getBuildingConfigLoader();
+        if (loader == null) return;
+        for (BuildingDefinition def : loader.getAll()) {
+            if (def.getRequiredVillageLevel() == newLevel) {
+                notifyMembers(village, def.getId(), def.getPermission());
+            }
+            for (var entry : def.getUpgrades().entrySet()) {
+                BuildingDefinition.UpgradeTier tier = entry.getValue();
+                if (tier.getRequiredVillageLevel() == newLevel) {
+                    notifyMembers(village, def.getId() + ":" + entry.getKey(), tier.getPermission());
+                }
+            }
+        }
+    }
+
+    private void notifyMembers(Village village, String key, String permission) {
+        for (UUID memberId : village.getMembers().keySet()) {
+            org.bukkit.entity.Player online = Bukkit.getPlayer(memberId);
+            if (online == null) continue;
+            if (permission == null || permission.isBlank()
+                    || online.hasPermission(permission)
+                    || online.hasPermission("village.admin")) {
+                newlyUnlocked.computeIfAbsent(memberId,
+                        k -> java.util.Collections.synchronizedSet(new java.util.HashSet<>())).add(key);
+            }
+        }
+    }
+
+    public boolean hasAccessToBuilding(Player player, BuildingDefinition def) {
+        if (player.hasPermission("village.admin")) return true;
+        String perm = def.getPermission();
+        return perm == null || perm.isBlank() || player.hasPermission(perm);
+    }
+
+    public boolean hasAccessToUpgrade(Player player, BuildingDefinition.UpgradeTier tier) {
+        if (player.hasPermission("village.admin")) return true;
+        String perm = tier.getPermission();
+        return perm == null || perm.isBlank() || player.hasPermission(perm);
+    }
+
+    /**
+     * Scans all buildings/upgrades this player can now access and marks any that are
+     * newly accessible (permission was granted since last check) as newly-unlocked.
+     * Called on login to catch offline permission grants.
+     */
+    public void checkAndMarkNewlyAccessible(Player player, Village village) {
+        BuildingConfigLoader loader = plugin.getBuildingConfigLoader();
+        if (loader == null) return;
+        UUID pid = player.getUniqueId();
+        for (BuildingDefinition def : loader.getAll()) {
+            if (!def.isShowInMenu()) continue;
+            if (!hasAccessToBuilding(player, def)) continue;
+            if (village.getLevel() >= def.getRequiredVillageLevel()) {
+                // Building itself: mark if not yet acknowledged
+                String key = def.getId();
+                newlyUnlocked.computeIfAbsent(pid,
+                        k -> java.util.Collections.synchronizedSet(new java.util.HashSet<>())).add(key);
+            }
+            // Upgrade tiers
+            for (var entry : def.getUpgrades().entrySet()) {
+                BuildingDefinition.UpgradeTier tier = entry.getValue();
+                if (!hasAccessToUpgrade(player, tier)) continue;
+                if (village.getLevel() >= tier.getRequiredVillageLevel()) {
+                    String key = def.getId() + ":" + entry.getKey();
+                    newlyUnlocked.computeIfAbsent(pid,
+                            k -> java.util.Collections.synchronizedSet(new java.util.HashSet<>())).add(key);
+                }
+            }
+        }
+    }
+
     private boolean matchesBuildingSearch(Player player, BuildingDefinition definition, VillageBuilding building) {
         String query = getBuildingSearchQuery(player);
         if (query.isBlank()) {
@@ -116,15 +208,12 @@ public final class GuiManager {
                 .toList();
     }
 
-    private String getBuildingDisplayName(VillageBuilding building, BuildingDefinition definition, BuildingType type) {
+    private String getBuildingDisplayName(VillageBuilding building, BuildingDefinition definition) {
         if (building != null && building.hasCustomName()) {
             return building.getCustomName();
         }
         if (definition != null) {
             return definition.getName();
-        }
-        if (type != null) {
-            return type.getDisplayName();
         }
         return building != null ? building.getTypeKey() : "Gebäude";
     }
@@ -133,29 +222,29 @@ public final class GuiManager {
 
     public void openFoundingGui(Player player) {
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.FOUNDING);
-        Inventory inv = Bukkit.createInventory(holder, 27, MessageUtil.color("&6&lDorf gruenden"));
+        Inventory inv = Bukkit.createInventory(holder, 27, MessageUtil.color(ui("ui.gui.founding.title", "&6&lDorf gruenden")));
 
         // Info item
         inv.setItem(4, new ItemBuilder(Material.BELL)
-                .name("&6&lDorf gruenden")
-                .lore("&7Gruende dein eigenes Dorf!",
-                        "&7",
-                        "&eVoraussetzungen:",
-                        "&7Geld: &a" + vaultHook.format(configManager.getFoundingMoneyCost()),
-                        "&7Permission: &a" + configManager.getFoundingPermission())
+                .name(ui("ui.gui.founding.name", "&6&lDorf gruenden"))
+                .lore(ui("ui.gui.founding.lore-1", "&7Gruende dein eigenes Dorf!"),
+                        ui("ui.gui.founding.empty", "&7"),
+                        ui("ui.gui.founding.requirements", "&eVoraussetzungen:"),
+                        ui("ui.gui.founding.money", "&7Geld: &a") + vaultHook.format(configManager.getFoundingMoneyCost()),
+                        ui("ui.gui.founding.permission", "&7Permission: &a") + configManager.getFoundingPermission())
                 .build());
 
         // Confirm
         inv.setItem(11, new ItemBuilder(Material.LIME_WOOL)
-                .name("&a&lBestaetigen")
-                .lore("&7Klicke um ein Dorf zu gruenden.",
-                        "&7Du wirst nach einem Namen gefragt.")
+                .name(ui("ui.gui.founding.confirm", "&a&lBestaetigen"))
+                .lore(ui("ui.gui.founding.confirm-lore-1", "&7Klicke um ein Dorf zu gruenden."),
+                        ui("ui.gui.founding.confirm-lore-2", "&7Du wirst nach einem Namen gefragt."))
                 .build());
 
         // Cancel
         inv.setItem(15, new ItemBuilder(Material.RED_WOOL)
-                .name("&c&lAbbrechen")
-                .lore("&7Abbrechen und Menue schliessen.")
+                .name(ui("ui.gui.founding.cancel", "&c&lAbbrechen"))
+                .lore(ui("ui.gui.founding.cancel-lore", "&7Abbrechen und Menue schliessen."))
                 .build());
 
         // Item requirements
@@ -170,8 +259,8 @@ public final class GuiManager {
             if (mat == null) mat = Material.BARRIER;
 
             inv.setItem(slot++, new ItemBuilder(mat, Math.min(amount, 64))
-                    .name("&eBenoetigtes Item")
-                    .lore("&7" + matName + " x" + amount)
+                    .name(ui("ui.gui.founding.required-item", "&eBenoetigtes Item"))
+                    .lore(ui("ui.gui.founding.required-item-lore", "&7") + matName + " x" + amount)
                     .build());
         }
 
@@ -182,101 +271,102 @@ public final class GuiManager {
 
     public void openMainGui(Player player, Village village) {
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.MAIN, village.getId().toString());
-        Inventory inv = Bukkit.createInventory(holder, 54, MessageUtil.color("&6&l" + village.getName()));
+        Inventory inv = Bukkit.createInventory(holder, 54, MessageUtil.color(ui("ui.gui.main.title-prefix", "&6&l") + village.getName()));
 
         // Village info - Bell
         inv.setItem(4, createBellItemForMain(player, village));
 
         // Upgrades
         inv.setItem(19, new ItemBuilder(Material.EXPERIENCE_BOTTLE)
-                .name("&a&lUpgrades")
-                .lore("&7Verbessere dein Dorf.")
+                .name(ui("ui.gui.main.upgrades", "&a&lUpgrades"))
+                .lore(ui("ui.gui.main.upgrades-lore", "&7Verbessere dein Dorf."))
                 .glow(true)
                 .build());
 
         // Buildings (nur Gebäude, nicht "Meine Gebäude")
         inv.setItem(21, new ItemBuilder(Material.BRICKS)
-                .name("&a&lGebaeude")
-                .lore("&7Baue neue Gebaeude oder verwalte bestehende.")
+                .name(ui("ui.gui.main.buildings", "&a&lGebaeude"))
+                .lore(ui("ui.gui.main.buildings-lore", "&7Baue neue Gebaeude oder verwalte bestehende."))
                 .glow(true)
                 .build());
 
         // Villagers
         inv.setItem(23, new ItemBuilder(Material.VILLAGER_SPAWN_EGG)
-                .name("&a&lDorfbewohner")
-                .lore("&7Verwalte deine Dorfbewohner.")
+                .name(ui("ui.gui.main.villagers", "&a&lDorfbewohner"))
+                .lore(ui("ui.gui.main.villagers-lore", "&7Verwalte deine Dorfbewohner."))
                 .glow(true)
                 .build());
 
         // Members
         inv.setItem(25, new ItemBuilder(Material.PLAYER_HEAD)
-                .name("&a&lMitglieder")
+                .name(ui("ui.gui.main.members", "&a&lMitglieder"))
                 .lore(village.getJoinRequests().isEmpty()
-                        ? List.of("&7Verwalte Dorfmitglieder.")
+                        ? List.of(ui("ui.gui.main.members-lore", "&7Verwalte Dorfmitglieder."))
                         : List.of("&7Verwalte Dorfmitglieder.",
-                                "&7Offene Anfragen: &e" + village.getJoinRequests().size()))
+                                ui("ui.gui.main.open-requests", "&7Offene Anfragen: &e") + village.getJoinRequests().size()))
                 .glow(true)
                 .build());
 
         // Relations
         inv.setItem(27, new ItemBuilder(Material.PAPER)
-                .name("&a&lRelationen")
-                .lore("&7Verwalte Beziehungen zu anderen Dörfern.",
-                        "&7Freundschaft, Handel, Krieg oder Durchgangssperre.")
+                .name(ui("ui.gui.main.relations", "&a&lRelationen"))
+                .lore(ui("ui.gui.main.relations-lore-1", "&7Verwalte Beziehungen zu anderen Dörfern."),
+                        ui("ui.gui.main.relations-lore-2", "&7Freundschaft, Handel, Krieg oder Durchgangssperre."))
                 .glow(true)
                 .build());
 
         // Border
         inv.setItem(37, new ItemBuilder(Material.MAP)
-                .name("&a&lGrenzen")
-                .lore("&7Zeige oder aendere die Dorfgrenzen.")
+                .name(ui("ui.gui.main.borders", "&a&lGrenzen"))
+                .lore(ui("ui.gui.main.borders-lore", "&7Zeige oder aendere die Dorfgrenzen."))
                 .build());
 
         // Level info
         inv.setItem(39, new ItemBuilder(Material.NETHER_STAR)
-                .name("&a&lQuests")
-                .lore("&7Alle Dorf-Quests fuer Mitglieder", "&7(6x9 Uebersicht).")
+                .name(ui("ui.gui.main.quests", "&a&lQuests"))
+                .lore(ui("ui.gui.main.quests-lore-1", "&7Alle Dorf-Quests fuer Mitglieder"),
+                        ui("ui.gui.main.quests-lore-2", "&7(6x9 Uebersicht)."))
                 .build());
 
         // Border preview toggle removed from main GUI (only available in Border menu)
 
         // Rename (slot 43)
         inv.setItem(43, new ItemBuilder(Material.NAME_TAG)
-                .name("&e&lDorf umbenennen")
-                .lore("&7Aendere den Namen deines Dorfes.",
-                        "&7",
-                        "&eKlicke zum Umbenennen.")
+                .name(ui("ui.gui.main.rename", "&e&lDorf umbenennen"))
+                .lore(ui("ui.gui.main.rename-lore-1", "&7Aendere den Namen deines Dorfes."),
+                        ui("ui.gui.main.rename-lore-2", "&7"),
+                        ui("ui.gui.main.rename-lore-3", "&eKlicke zum Umbenennen."))
                 .build());
 
         VillageMember viewer = village.getMember(player.getUniqueId());
         boolean canDelete = viewer != null && viewer.getRole().canDeleteVillage();
         inv.setItem(53, new ItemBuilder(canDelete ? Material.TNT : Material.GRAY_DYE)
-                .name(canDelete ? "&c&lDorf loeschen" : "&8&lDorf loeschen")
+                .name(canDelete ? ui("ui.gui.main.delete", "&c&lDorf loeschen") : ui("ui.gui.main.delete-locked", "&8&lDorf loeschen"))
                 .lore(canDelete
-                        ? List.of("&7Loesche dein Dorf unwiderruflich.", "&7", "&cKlicke zum Loeschen.")
-                        : List.of("&7Nur der Gruender kann das Dorf loeschen."))
+                        ? List.of(ui("ui.gui.main.delete-lore-1", "&7Loesche dein Dorf unwiderruflich."), ui("ui.gui.main.delete-lore-2", "&7"), ui("ui.gui.main.delete-lore-3", "&cKlicke zum Loeschen."))
+                        : List.of(ui("ui.gui.main.delete-locked-lore", "&7Nur der Gruender kann das Dorf loeschen.")))
                 .build());
 
         if (viewer != null && !village.isFounder(player.getUniqueId())) {
             inv.setItem(51, new ItemBuilder(Material.OAK_DOOR)
-                    .name("&c&lDorf verlassen")
-                    .lore("&7Verlasse dieses Dorf.",
-                            "&7Du kannst danach einem anderen Dorf beitreten.")
+                    .name(ui("ui.gui.main.leave", "&c&lDorf verlassen"))
+                    .lore(ui("ui.gui.main.leave-lore-1", "&7Verlasse dieses Dorf."),
+                            ui("ui.gui.main.leave-lore-2", "&7Du kannst danach einem anderen Dorf beitreten."))
                     .build());
         }
 
         if (player.hasPermission("village.admin")) {
             inv.setItem(45, new ItemBuilder(Material.COMMAND_BLOCK)
-                    .name("&c&lSchematic Tools")
-                    .lore("&7Oeffnet den Admin-Schematic-Workflow.",
-                            "&7",
-                            "&eKlicke fuer Befehls-Hilfe.")
+                    .name(ui("ui.gui.main.schematic-tools", "&c&lSchematic Tools"))
+                    .lore(ui("ui.gui.main.schematic-tools-lore-1", "&7Oeffnet den Admin-Schematic-Workflow."),
+                            ui("ui.gui.main.schematic-tools-lore-2", "&7"),
+                            ui("ui.gui.main.schematic-tools-lore-3", "&eKlicke fuer Befehls-Hilfe."))
                     .build());
         }
 
         // Close
         inv.setItem(49, new ItemBuilder(Material.BARRIER)
-                .name("&c&lSchliessen")
+                .name(ui("ui.gui.main.close", "&c&lSchliessen"))
                 .build());
 
         player.openInventory(inv);
@@ -573,6 +663,8 @@ public final class GuiManager {
 
         int slot = 0;
         for (BuildingDefinition def : getDefinitionList()) {
+            // Only show buildings the player has the required permission for
+            if (!hasAccessToBuilding(player, def)) continue;
             if (!matchesBuildingSearch(player, def, null)) continue;
             boolean unlocked = village.getLevel() >= def.getRequiredVillageLevel();
 
@@ -662,17 +754,16 @@ public final class GuiManager {
         int slot = 0;
         for (VillageBuilding building : village.getBuildings()) {
             BuildingDefinition def = getDefinition(building.getTypeKey());
-            BuildingType type = configManager.getBuildingType(building.getTypeKey());
-            if (def == null && type == null) continue;
+            if (def == null) continue;
 
             boolean underConstruction = buildingService != null && buildingService.isUnderConstruction(building.getId());
             String status = building.isCompleted() ? "&aFertig" : underConstruction ? "&eAktive Baustelle" : "&cIm Bau";
             int level = building.getLevel();
-            String title = def != null ? def.getName() : type.getDisplayName();
-            String desc = def != null ? def.getDescription() : type.getDescription();
-            Material icon = def != null ? def.getIcon() : type.getIcon();
-            int maxLevel = def != null ? def.getMaxUpgradeTier() : type.getMaxLevel();
-            int capacity = def != null ? def.getVillagerSlots() : type.getEffectiveVillagerCapacity(level);
+            String title = def.getName();
+            String desc = def.getDescription();
+            Material icon = def.getIcon();
+            int maxLevel = def.getMaxUpgradeTier();
+            int capacity = def.getVillagerSlots();
 
             inv.setItem(slot++, new ItemBuilder(icon)
                     .name(title)
@@ -709,9 +800,8 @@ public final class GuiManager {
         if (building == null) return;
 
         BuildingDefinition def = getDefinition(building.getTypeKey());
-        BuildingType type = configManager.getBuildingType(building.getTypeKey());
-        String title = getBuildingDisplayName(building, def, type);
-        Material icon = def != null ? def.getIcon() : (type != null ? type.getIcon() : Material.BRICKS);
+        String title = getBuildingDisplayName(building, def);
+        Material icon = def != null ? def.getIcon() : Material.BRICKS;
 
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.BUILDING_DETAIL,
                 village.getId().toString() + ":" + buildingId.toString());
@@ -740,9 +830,43 @@ public final class GuiManager {
                         "&7mit Platzhaltern (&e%building_type%&7, &e%owner%&7, &e%level%&7).")
                 .build());
 
-        inv.setItem(21, new ItemBuilder(Material.ANVIL)
-                .name("&a&lUpgrades")
-                .lore("&7Gebäude-Upgrades anzeigen/kaufen.")
+        // Upgrades button: reflect permission/level state and glow if newly unlocked
+        boolean upgradeNewlyUnlocked = false;
+        boolean upgradeAvailable = false;
+        boolean upgradeLocked = false;
+        String upgradeLockedReason = "";
+        if (def != null) {
+            int nextTier = building.getLevel() + 1;
+            BuildingDefinition.UpgradeTier nextUpgrade = def.getUpgradeTier(nextTier);
+            if (nextUpgrade != null) {
+                String upgradeKey = def.getId() + ":" + nextTier;
+                upgradeNewlyUnlocked = isNewlyUnlocked(player.getUniqueId(), upgradeKey);
+                // Check level requirement
+                if (village.getLevel() < nextUpgrade.getRequiredVillageLevel()) {
+                    upgradeLocked = true;
+                    upgradeLockedReason = "&cDorflevel " + nextUpgrade.getRequiredVillageLevel() + " benötigt";
+                }
+                // Check permission
+                String upgPerm = nextUpgrade.getPermission();
+                if (!upgradeLocked && upgPerm != null && !upgPerm.isBlank()
+                        && !player.hasPermission(upgPerm)
+                        && !player.hasPermission("village.admin")) {
+                    upgradeLocked = true;
+                    upgradeLockedReason = "&cFehlende Berechtigung";
+                }
+                upgradeAvailable = !upgradeLocked;
+            } else {
+                upgradeLocked = true;
+                upgradeLockedReason = "&7Maximales Level erreicht";
+            }
+        }
+        Material upgradeMat = upgradeLocked ? Material.GRAY_STAINED_GLASS_PANE : Material.ANVIL;
+        inv.setItem(21, new ItemBuilder(upgradeMat)
+                .name((upgradeNewlyUnlocked ? "&e&l✦ " : (upgradeAvailable ? "&a&l" : "&7")) + "Upgrades")
+                .lore(upgradeNewlyUnlocked ? "&e&lNEU freigeschaltet!" : "",
+                        upgradeLocked ? upgradeLockedReason : "&7Gebäude-Upgrades kaufen.",
+                        upgradeAvailable ? "&7Klicke zum Upgraden." : "")
+                .glow(upgradeNewlyUnlocked && upgradeAvailable)
                 .build());
 
         inv.setItem(23, new ItemBuilder(Material.PLAYER_HEAD)
@@ -771,11 +895,14 @@ public final class GuiManager {
                     .build());
         }
 
-        inv.setItem(43, new ItemBuilder(Material.TNT)
-                .name("&c&lAbreißen")
-                .lore("&7Linksklick: Nur Datensatz/Region/Schild entfernen.",
-                        "&7Rechtsklick: Gebäude-Blöcke ebenfalls abbauen.")
-                .build());
+        // Dorfzentrum is the village's foundation — no demolish button
+        if (!"dorfzentrum".equals(building.getTypeKey())) {
+            inv.setItem(43, new ItemBuilder(Material.TNT)
+                    .name("&c&lAbreißen")
+                    .lore("&7Linksklick: Nur Datensatz/Region/Schild entfernen.",
+                            "&7Rechtsklick: Gebäude-Blöcke ebenfalls abbauen.")
+                    .build());
+        }
 
         inv.setItem(49, new ItemBuilder(Material.ARROW)
                 .name("&7Zurück")
@@ -790,8 +917,7 @@ public final class GuiManager {
                 .findFirst().orElse(null);
         if (building == null) return;
         BuildingDefinition def = getDefinition(building.getTypeKey());
-        BuildingType type = configManager.getBuildingType(building.getTypeKey());
-        String title = def != null ? def.getName() : (type != null ? type.getDisplayName() : building.getTypeKey());
+        String title = def != null ? def.getName() : building.getTypeKey();
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.BUILDING_WHITELIST,
                 village.getId() + ":" + buildingId);
         Inventory inv = Bukkit.createInventory(holder, 54, MessageUtil.color("&6&lWhitelist: " + title));
@@ -834,16 +960,23 @@ public final class GuiManager {
             double localCost = type.getLocalCostPerLevel() * (currentLevel + 1);
             int pointsCost = type.getPointsPerLevel() * (currentLevel + 1);
 
-            inv.setItem(slot++, new ItemBuilder(type.getIcon())
+            boolean levelLocked = village.getLevel() < type.getRequiredVillageLevel();
+            String levelRequireLine = levelLocked
+                    ? "&c&lDorflevel " + type.getRequiredVillageLevel() + " erforderlich!"
+                    : "&aDorflevel " + type.getRequiredVillageLevel() + " ✔";
+
+            inv.setItem(slot++, new ItemBuilder(levelLocked ? Material.BARRIER : type.getIcon())
                     .name(type.getDisplayName() + " &7[&e" + currentLevel + "&7/&e" + type.getMaxLevel() + "&7]")
                     .lore(type.getDescription(),
+                            "&7",
+                            levelRequireLine,
                             "&7",
                             maxed ? "&aMax Level erreicht!" : "&7Kosten global: &e" + vaultHook.format(globalCost),
                             maxed ? "" : "&7Kosten lokal: &e" + vaultHook.format(localCost),
                             maxed ? "" : "&7Punkte: &e" + pointsCost,
                             "&7",
-                            maxed ? "" : "&aKlicke zum Kaufen!")
-                    .glow(currentLevel > 0)
+                            levelLocked ? "&cNoch nicht verfügbar." : (maxed ? "" : "&aKlicke zum Kaufen!"))
+                    .glow(currentLevel > 0 && !levelLocked)
                     .build());
 
             if (slot >= 45) break;
@@ -880,7 +1013,7 @@ public final class GuiManager {
         player.openInventory(inv);
     }
 
-    public void openMemberRolesGui(Player player, Village village, UUID memberId) {
+    public void openMemberRolesGui(Player player, Village village, UUID memberId, com.example.village.service.UpgradeService upgradeService) {
         VillageMember member = village.getMember(memberId);
         if (member == null) return;
         String name = Bukkit.getOfflinePlayer(memberId).getName();
@@ -898,10 +1031,24 @@ public final class GuiManager {
             String upg = role.upgradeKey();
             boolean unlocked = upg == null || village.getUpgradeLevel(upg) > 0;
             Material mat = unlocked ? (enabled ? Material.LIME_DYE : Material.GRAY_DYE) : Material.BARRIER;
-            inv.setItem(slot, new ItemBuilder(mat)
-                    .name((enabled ? "&a" : "&7") + role.getDisplayName())
-                    .lore(unlocked ? "&7Klick: Rolle toggeln." : "&cNicht freigeschaltet.")
-                    .build());
+            com.example.village.service.UpgradeService.RoleUnlock unlock = null;
+            if (upgradeService != null && upg != null) {
+                unlock = upgradeService.getRoleUnlocks().stream()
+                        .filter(r -> r.key().equalsIgnoreCase(upg))
+                        .findFirst().orElse(null);
+            }
+            ItemBuilder builder = new ItemBuilder(mat)
+                    .name((enabled ? "&a" : "&7") + role.getDisplayName());
+            if (unlocked) {
+                builder.lore("&7Klick: Rolle toggeln.");
+            } else {
+                builder.lore("&cNicht freigeschaltet.",
+                        unlock != null ? "&7Kosten global: &e" + vaultHook.format(unlock.globalMoneyCost()) : "&7Kosten global: &e?",
+                        unlock != null ? "&7Kosten lokal: &e" + String.format(java.util.Locale.US, "%.2f", unlock.localMoneyCost()) : "&7Kosten lokal: &e?",
+                        unlock != null ? "&7Punkte: &e" + unlock.pointsCost() : "&7Punkte: &e?",
+                        "&aKlicke zum Freischalten.");
+            }
+            inv.setItem(slot, builder.build());
             slot += 2;
         }
         if (!village.isFounder(memberId)) {
@@ -982,7 +1129,8 @@ public final class GuiManager {
                                     com.example.village.model.VillagerNeed.HAPPINESS)) + "%",
                             "&7Geld: &e" + String.format("%.2f", villager.getWallet()),
                             "&7",
-                            "&aKlicke fuer Details!")
+                            "&aLinksklick: Details",
+                            "&6Rechtsklick: Temporär anzeigen")
                     .build());
 
             if (slot >= 45) break;
@@ -1100,15 +1248,54 @@ public final class GuiManager {
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.VILLAGER_DETAIL,
                 village.getId().toString() + ":" + villager.getId().toString());
         VillagerProfession profession = configManager.getProfession(villager.getProfessionKey());
-        Inventory inv = Bukkit.createInventory(holder, 27,
+        Inventory inv = Bukkit.createInventory(holder, 54,
                 MessageUtil.color("&6&l" + villager.getName()));
 
+        if (villager.getNutrientLevels().isEmpty()) {
+            ConfigurationSection nutrients = configManager.getVillagerNutrientsSection();
+            double hungerFallback = Math.max(0.0, Math.min(100.0, villager.getNeedValue(com.example.village.model.VillagerNeed.HUNGER)));
+            if (nutrients != null) {
+                int capacity = configManager.getVillagerNutrientStorageCapacity();
+                for (String nutrientKey : nutrients.getKeys(false)) {
+                    villager.setNutrientCapacity(nutrientKey, capacity);
+                    villager.setNutrientLevel(nutrientKey, capacity * (hungerFallback / 100.0));
+                }
+            }
+        }
+
         // Info
+        StringBuilder nutrientLore = new StringBuilder();
+        var nutritionService = plugin.getVillagerNutritionService();
+        if (!villager.getNutrientLevels().isEmpty()) {
+            for (Map.Entry<String, Double> entry : villager.getNutrientLevels().entrySet()) {
+                double capacity = villager.getNutrientCapacity(entry.getKey());
+                double percent = capacity > 0 ? (entry.getValue() / capacity) * 100.0 : 0.0;
+                String label = nutritionService != null
+                        ? nutritionService.getNutrientDisplayName(entry.getKey())
+                        : entry.getKey();
+                String bar = nutritionService != null
+                        ? nutritionService.formatNutrientBar(percent)
+                        : String.format("%.0f%%", percent);
+                nutrientLore.append("&7").append(label).append(": ").append(bar).append("&r\n");
+            }
+        } else {
+            nutrientLore.append("&7Keine Nährstoffwerte gespeichert.&r\n");
+        }
+        String[] nutrientLines = java.util.Arrays.stream(nutrientLore.toString().split("\\n"))
+                .filter(line -> !line.isBlank())
+                .toArray(String[]::new);
+        String[] loreLines = new String[]{
+                "&7Beruf: " + (profession != null ? profession.getDisplayName() : "Unbekannt"),
+                "&7Level: &e" + villager.getLevel(),
+                "&7XP: &e" + String.format("%.1f", villager.getXp()),
+                "&7Hunger (Nährstoffe): &e" + String.format("%.0f", villager.getNeedValue(com.example.village.model.VillagerNeed.HUNGER)) + "%",
+                "",
+        };
+        String[] finalLore = java.util.stream.Stream.concat(java.util.Arrays.stream(loreLines), java.util.Arrays.stream(nutrientLines))
+                .toArray(String[]::new);
         inv.setItem(4, new ItemBuilder(profession != null ? profession.getIcon() : Material.VILLAGER_SPAWN_EGG)
                 .name("&a" + villager.getName())
-                .lore("&7Beruf: " + (profession != null ? profession.getDisplayName() : "Unbekannt"),
-                        "&7Level: &e" + villager.getLevel(),
-                        "&7XP: &e" + String.format("%.1f", villager.getXp()))
+                .lore(finalLore)
                 .build());
 
         // Inventory
@@ -1120,9 +1307,64 @@ public final class GuiManager {
         // Feed
         inv.setItem(12, new ItemBuilder(Material.BREAD)
                 .name("&aFuettern")
-                .lore("&7Hunger: &e" + String.format("%.0f",
+                .lore("&7Hunger (Nährstoffe): &e" + String.format("%.0f",
                         villager.getNeedValue(com.example.village.model.VillagerNeed.HUNGER)) + "%",
+                        "&7Nährstoffe werden aus dem Inventar des Spielers verwendet.",
                         "&7Klicke zum Fuettern.")
+                .build());
+
+        // Assign bed
+        inv.setItem(20, new ItemBuilder(Material.RED_BED)
+                .name("&aBett zuweisen")
+                .lore("&7Linksklick auf ein Bett in einem",
+                        "&7fertigen Wohnhaus.",
+                        "&7",
+                        villager.getAssignedBedBuildingId() != null
+                                ? "&aAktuell zugewiesen"
+                                : "&cKein Bett zugewiesen")
+                .build());
+
+        // Assign job
+        inv.setItem(24, new ItemBuilder(Material.IRON_PICKAXE)
+                .name("&aJob zuweisen")
+                .lore("&7Linksklick auf einen Arbeitsblock",
+                        "&7eines fertigen Gebaeudes.",
+                        "&7",
+                        villager.getAssignedJobBuildingId() != null
+                                ? "&aAktuell ist ein Job zugewiesen."
+                                : "&cNoch kein Job zugewiesen.")
+                .build());
+
+        // Profession menu
+        inv.setItem(22, new ItemBuilder(Material.BOOK)
+                .name(MessageUtil.text("ui.villager-menu.profession-menu", "&6Berufsmenu"))
+                .lore(MessageUtil.text("ui.villager-menu.profession-menu-lore-1", "&7Job-spezifische Aktionen,"),
+                        MessageUtil.text("ui.villager-menu.profession-menu-lore-2", "&7Lager und Auftraege."))
+                .build());
+
+        // Contracts
+        inv.setItem(23, new ItemBuilder(Material.PAPER)
+                .name(MessageUtil.text("ui.villager-menu.contracts", "&eAuftraege"))
+                .lore(MessageUtil.text("ui.villager-menu.contracts-lore-1", "&7Einen Standardauftrag"),
+                        MessageUtil.text("ui.villager-menu.contracts-lore-2", "&7zwischen Dorfbewohnern anlegen."))
+                .build());
+
+        // Job storage
+        inv.setItem(25, new ItemBuilder(Material.CHEST)
+                .name(MessageUtil.text("ui.villager-menu.job-storage", "&aJob-Lager"))
+                .lore(MessageUtil.text("ui.villager-menu.job-storage-lore-1", "&7Zeigt das berufsbezogene Lager"),
+                        MessageUtil.text("ui.villager-menu.job-storage-lore-2", "&7und die aktuelle Kapazitaet."))
+                .build());
+
+        // Fire from job
+        inv.setItem(28, new ItemBuilder(Material.BARRIER)
+                .name("&cJob kuendigen")
+                .lore("&7Entlasse den Dorfbewohner",
+                        "&7von seinem aktuellen Job.",
+                        "&7",
+                        !"none".equals(villager.getProfessionKey())
+                                ? "&eKlicke zum Kuendigen."
+                                : "&8Kein Job vorhanden.")
                 .build());
 
         // Trade
@@ -1137,20 +1379,20 @@ public final class GuiManager {
                 .lore("&7Entferne diesen Dorfbewohner.")
                 .build());
 
-        inv.setItem(22, new ItemBuilder(Material.ARROW)
+        inv.setItem(49, new ItemBuilder(Material.ARROW)
                 .name("&7Zurueck")
                 .build());
 
         player.openInventory(inv);
     }
 
-    // --- Villager Config GUI (Shift+Right-click on villager) ---
+    // --- Villager Config GUI (legacy / alternate entry) ---
 
     public void openVillagerConfigGui(Player player, Village village, CustomVillager villager) {
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.VILLAGER_CONFIG,
                 village.getId().toString() + ":" + villager.getId().toString());
-        Inventory inv = Bukkit.createInventory(holder, 27,
-                MessageUtil.color("&6&lKonfiguration: " + villager.getName()));
+        Inventory inv = Bukkit.createInventory(holder, 54,
+                MessageUtil.color("&6&lZuweisungen: " + villager.getName()));
 
         // Info
         VillagerProfession profession = configManager.getProfession(villager.getProfessionKey());
@@ -1164,7 +1406,7 @@ public final class GuiManager {
                 .build());
 
         // Assign bed
-        inv.setItem(11, new ItemBuilder(Material.RED_BED)
+        inv.setItem(20, new ItemBuilder(Material.RED_BED)
                 .name("&a&lBett zuweisen")
                 .lore("&7Weise diesem Dorfbewohner",
                         "&7ein freies Bett zu.",
@@ -1175,18 +1417,18 @@ public final class GuiManager {
                 .build());
 
         // Choose job
-        inv.setItem(13, new ItemBuilder(Material.IRON_PICKAXE)
-                .name("&a&lJob waehlen")
+        inv.setItem(24, new ItemBuilder(Material.IRON_PICKAXE)
+                .name("&a&lJob zuweisen")
                 .lore("&7Weise diesem Dorfbewohner",
                         "&7einen Job zu.",
                         "&7",
                         "&7Aktueller Job: " + profName,
                         "&7",
-                        "&eKlicke und dann auf ein Gebaeudeblock.")
+                        "&eLinksklick auf Arbeitsblock im Gebaeude.")
                 .build());
 
         // Fire from job
-        inv.setItem(15, new ItemBuilder(Material.BARRIER)
+        inv.setItem(28, new ItemBuilder(Material.BARRIER)
                 .name("&c&lJob kuendigen")
                 .lore("&7Entlasse den Dorfbewohner",
                         "&7von seinem aktuellen Job.",
@@ -1196,7 +1438,7 @@ public final class GuiManager {
                                 : "&8Kein Job vorhanden.")
                 .build());
 
-        inv.setItem(22, new ItemBuilder(Material.ARROW)
+        inv.setItem(49, new ItemBuilder(Material.ARROW)
                 .name("&7Schliessen")
                 .build());
 
@@ -1206,21 +1448,21 @@ public final class GuiManager {
     // --- Building Direction Selection GUI ---
 
     public void openBuildingDirectionGui(Player player, Village village, String typeKey) {
-        BuildingType type = configManager.getBuildingType(typeKey);
-        if (type == null) return;
+        BuildingDefinition def = getDefinition(typeKey);
+        if (def == null) return;
 
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.BUILDING_DIRECTION,
                 village.getId().toString() + ":" + typeKey);
         Inventory inv = Bukkit.createInventory(holder, 54,
-                MessageUtil.color("&6&lRichtung: " + type.getDisplayName()));
+                MessageUtil.color("&6&lRichtung: " + def.getName()));
 
         // Info
-        inv.setItem(13, new ItemBuilder(type.getIcon())
-                .name(type.getDisplayName())
+        inv.setItem(13, new ItemBuilder(def.getIcon())
+                .name(def.getName())
                 .lore("&7Waehle die Richtung der Eingangstuer.",
                         "&7",
-                        "&7Kosten: &e" + vaultHook.format(type.getCost()),
-                        "&7Schematic: &e" + type.getSchematic())
+                        "&7Kosten: &e" + vaultHook.format(def.getBuildMoneyGlobal()),
+                        "&7Schematic: &e" + (def.getSchematic() != null ? def.getSchematic() : ""))
                 .build());
 
         // North (slot 4)
@@ -1266,12 +1508,23 @@ public final class GuiManager {
 
         int slot = 0;
         for (BuildingConfigLoader.CategoryInfo cat : cats) {
-            if (slot >= 45) break; // Reserve space for back button
+            if (slot >= 45) break;
             String catId = cat.getId();
-            long count = loader.getByCategory(catId).stream().filter(BuildingDefinition::isShowInMenu).count();
+            // Only show categories that have at least one building accessible to this player
+            List<BuildingDefinition> accessible = loader.getByCategory(catId).stream()
+                    .filter(d -> d.isShowInMenu() && hasAccessToBuilding(player, d))
+                    .toList();
+            if (accessible.isEmpty()) continue;
+            long count = accessible.size();
+            // Glow if any building in this category is newly unlocked for this player
+            boolean hasNew = accessible.stream()
+                    .anyMatch(d -> isNewlyUnlocked(player.getUniqueId(), d.getId()));
             inv.setItem(slot++, new ItemBuilder(cat.getIcon())
-                    .name(cat.getName())
-                    .lore("&7Kategorie: &e" + cat.getName(), "&7Verfügbare Gebäude: &e" + count)
+                    .name((hasNew ? "&e&l✦ " : "") + cat.getName())
+                    .lore("&7Kategorie: &e" + cat.getName(),
+                          "&7Verfügbare Gebäude: &e" + count,
+                          hasNew ? "&e&lNEU Freigeschaltet!" : "")
+                    .glow(hasNew)
                     .build());
         }
 
@@ -1290,22 +1543,45 @@ public final class GuiManager {
 
         int slot = 0;
         for (BuildingDefinition def : loader.getByCategory(categoryId)) {
-            if (!def.isShowInMenu()) continue;
+            if (!def.isShowInMenu()) {
+                // Show non-menu buildings (e.g. dorfzentrum) only if the village already has one
+                VillageBuilding existing = village.getBuildings().stream()
+                        .filter(b -> b.getTypeKey().equals(def.getId()) && b.isCompleted())
+                        .findFirst().orElse(null);
+                if (existing == null) continue;
+                if (!matchesBuildingSearch(player, def, null)) continue;
+                inv.setItem(slot++, new ItemBuilder(def.getIcon())
+                        .name("&6&l" + def.getName())
+                        .lore(def.getDescription(),
+                                "&7",
+                                "&7Level: &e" + existing.getLevel() + " / " + def.getMaxUpgradeTier(),
+                                existing.hasCustomName() ? "&7Name: &e" + existing.getCustomName() : "",
+                                "&7",
+                                "&aKlicke: Verwalten")
+                        .glow(true)
+                        .build());
+                if (slot >= 45) break;
+                continue;
+            }
+            // Hide buildings the player has no permission for (unless admin)
+            if (!hasAccessToBuilding(player, def)) continue;
             if (!matchesBuildingSearch(player, def, null)) continue;
-            boolean unlocked = village.getLevel() >= def.getRequiredVillageLevel();
+            boolean levelOk = village.getLevel() >= def.getRequiredVillageLevel();
             long builtCount = village.getBuildings().stream().filter(b -> b.getTypeKey().equals(def.getId())).count();
+            boolean isNew = levelOk && isNewlyUnlocked(player.getUniqueId(), def.getId());
 
-            inv.setItem(slot++, new ItemBuilder(unlocked ? def.getIcon() : Material.GRAY_STAINED_GLASS_PANE)
-                    .name(unlocked ? def.getName() : "&8" + def.getId())
+            inv.setItem(slot++, new ItemBuilder(levelOk ? def.getIcon() : Material.GRAY_STAINED_GLASS_PANE)
+                    .name((isNew ? "&e&l✦ " : "") + (levelOk ? def.getName() : "&8" + def.getId()))
                     .lore(def.getDescription(),
                             "&7",
+                            isNew ? "&e&lNEU Freigeschaltet!" : "",
                             "&7Kosten: &e" + vaultHook.format(def.getBuildMoneyGlobal()),
                             "&7Level benoetigt: &e" + def.getRequiredVillageLevel(),
                             "&7Kapazitaet: &e" + def.getVillagerSlots() + " Bewohner",
                             "&7Gebaut: &e" + builtCount,
                             "&7",
-                            unlocked ? "&aKlicke: Optionen für diesen Typ" : "&cLevel " + def.getRequiredVillageLevel() + " benoetigt!")
-                    .glow(unlocked)
+                            levelOk ? "&aKlicke: Optionen für diesen Typ" : "&cLevel " + def.getRequiredVillageLevel() + " benoetigt!")
+                    .glow(isNew || levelOk)
                     .build());
 
             if (slot >= 45) break;
@@ -1470,11 +1746,14 @@ public final class GuiManager {
                                 : "&7Aktuell: &e" + getBuildingSearchQuery(player))
                 .build());
 
-        inv.setItem(45, new ItemBuilder(Material.EMERALD_BLOCK)
-                .name("&a&lNeues Gebäude bauen")
-                .lore("&7Richtung wählen und platzieren.",
-                        "&7Typ: &e" + def.getName())
-                .build());
+        // Unique / non-buildable-from-menu types (e.g. dorfzentrum) cannot be built again
+        if (def.isShowInMenu()) {
+            inv.setItem(45, new ItemBuilder(Material.EMERALD_BLOCK)
+                    .name("&a&lNeues Gebäude bauen")
+                    .lore("&7Richtung wählen und platzieren.",
+                            "&7Typ: &e" + def.getName())
+                    .build());
+        }
 
         inv.setItem(49, new ItemBuilder(Material.ARROW)
                 .name("&7Zurueck")

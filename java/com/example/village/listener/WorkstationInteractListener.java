@@ -1,6 +1,7 @@
 package com.example.village.listener;
 
 import com.example.village.VillagePlugin;
+import com.example.village.config.VillageConfigManager;
 import com.example.village.model.*;
 import com.example.village.service.*;
 import com.example.village.util.MessageUtil;
@@ -35,6 +36,7 @@ public final class WorkstationInteractListener implements Listener {
     private final ProductionService productionService;
     private final PathService pathService;
     private final String prefix;
+    private final VillageConfigManager configManager;
 
     /** Spieler → offenes Gebäude-Truhen-ID (für Cache-Sync beim Schließen) */
     private final Map<UUID, UUID> openChestSessions = new HashMap<>();
@@ -53,6 +55,7 @@ public final class WorkstationInteractListener implements Listener {
         this.pathService       = pathService;
         this.guiClickListener  = guiClickListener;
         this.prefix            = plugin.getConfig().getString("prefix", "§6[Dorf] ");
+        this.configManager     = plugin.getConfigManager();
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -88,14 +91,14 @@ public final class WorkstationInteractListener implements Listener {
             && !player.hasPermission("village.building.*")
             && !player.hasPermission("village.admin")) {
             event.setCancelled(true);
-            MessageUtil.send(player, prefix, "&cFehlende Berechtigung: &e" + def.getPermission());
+            MessageUtil.send(player, prefix, configManager.text("messages.workstation-no-permission", "&cFehlende Berechtigung: &e%permission%").replace("%permission%", def.getPermission()));
             return;
         }
 
         // Noch im Bau?
         if (!building.isCompleted()) {
             event.setCancelled(true);
-            MessageUtil.send(player, prefix, "&cDieses Gebäude ist noch im Bau.");
+            MessageUtil.send(player, prefix, configManager.text("messages.workstation-under-construction", "&cDieses Gebäude ist noch im Bau."));
             return;
         }
 
@@ -130,41 +133,47 @@ public final class WorkstationInteractListener implements Listener {
         if (village == null) return;
         if (findByWorkstation(village, block) != null) {
             event.setCancelled(true);
-            MessageUtil.send(event.getPlayer(), prefix, "&cWorkstation-Block – kann nicht zerstört werden!");
+            MessageUtil.send(event.getPlayer(), prefix, configManager.text("messages.workstation-protected", "&cWorkstation-Block – kann nicht zerstört werden!"));
         }
     }
 
     // ── Info-Ausgabe ──────────────────────────────────────────────
 
     private void showBuildingInfo(Player player, VillageBuilding building, BuildingDefinition def) {
-        player.sendMessage("§6§l" + def.getName() + " §8(Tier " + building.getLevel() + "/" + def.getMaxUpgradeTier() + ")");
-        player.sendMessage("§7" + def.getDescription());
+        player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-info-title", "§6§l%name% §8(Tier %level%/%max%)")
+                .replace("%name%", def.getName())
+                .replace("%level%", String.valueOf(building.getLevel()))
+                .replace("%max%", String.valueOf(def.getMaxUpgradeTier()))));
+        player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-description", "§7%description%").replace("%description%", def.getDescription())));
 
         // Aktive Produktionsjobs
         List<ProductionService.ActiveJob> jobs = productionService.getActiveJobs(building.getId());
         if (!jobs.isEmpty()) {
-            player.sendMessage("§aProduktionen:");
-            jobs.forEach(j -> player.sendMessage("  §e" + j.recipe.getId()
-                + " §8– noch §e" + j.getRemainingSeconds() + "s"));
+            player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-productions", "§aProduktionen:")));
+            jobs.forEach(j -> player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-production-line", "  §e%recipe% §8– noch §e%seconds%s")
+                .replace("%recipe%", j.recipe.getId())
+                .replace("%seconds%", String.valueOf(j.getRemainingSeconds())))));
         }
 
         // Truhen-Info
         if (def.getChestConfig() != null) {
             int slots = chestManager.getSlots(building.getId());
-            player.sendMessage("§7Lager: §e" + ChestConfig.slotsToRows(slots) + "×9 §7(" + slots + " Slots)");
+            player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-storage", "§7Lager: §e%rows%x9 §7(%slots% Slots)")
+                    .replace("%rows%", String.valueOf(ChestConfig.slotsToRows(slots)))
+                    .replace("%slots%", String.valueOf(slots))));
         }
 
         // Nächstes Upgrade
         BuildingDefinition.UpgradeTier next = def.getUpgradeTier(building.getLevel() + 1);
         if (next != null) {
-            player.sendMessage("§eNächstes Upgrade: §6" + next.getName());
-            player.sendMessage("§7Kosten: " + formatCost(next));
+            player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-next-upgrade", "§eNächstes Upgrade: §6%name%").replace("%name%", next.getName())));
+            player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-cost", "§7Kosten: %cost%").replace("%cost%", formatCost(next))));
         }
     }
 
     private void showSkillInfo(Player player, VillageBuilding building, BuildingDefinition def, Village village) {
-        player.sendMessage("§6§l" + def.getName() + " – Skilltrees");
-        player.sendMessage("§7Hier werden Job-Skilltrees freigeschaltet.");
+        player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-skilltree-title", "§6§l%name% – Skilltrees").replace("%name%", def.getName())));
+        player.sendMessage(MessageUtil.color(configManager.text("messages.workstation-skilltree-desc", "§7Hier werden Job-Skilltrees freigeschaltet.")));
     }
 
     // ── Suche ─────────────────────────────────────────────────────
@@ -174,7 +183,7 @@ public final class WorkstationInteractListener implements Listener {
             BuildingDefinition def = configLoader.getDefinition(b.getTypeKey());
             if (def == null) continue;
             String key = WorkstationMatcher.resolveWorkstationKey(
-                    b, def, block.getLocation(), block.getType(), null);
+                    plugin, b, def, block.getLocation(), block.getType());
             if (key != null) return b;
         }
         return null;

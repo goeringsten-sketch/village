@@ -5,6 +5,7 @@ import org.bukkit.Material;
 
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +22,8 @@ public final class CustomVillager {
     private double wallet;
     private final Map<Material, Integer> inventory;
     private final Map<VillagerNeed, Double> needs;
+    private final Map<String, Double> nutrientLevels;
+    private final Map<String, Double> nutrientCapacities;
     private final Map<String, VillagerSkill> skills;
     private Location homeLocation;
     private Location workLocation;
@@ -38,6 +41,12 @@ public final class CustomVillager {
     private long recruitmentDate;
     private final Map<UUID, VillagerRelation> playerRelations;
     private double morale;  // 0-100
+    /** Aktivität für nährstoffabhängigen Decay (WORK, IDLE, SLEEP, WAKE_UP) */
+    private String activityDecayKey = "IDLE";
+    /** Steuerung fuer das Produktions-Menue: Produktion pausiert? */
+    private boolean productionPaused = false;
+    /** Steuerung fuer das Produktions-Menue: gewuenschtes Zielprodukt (null = alle moeglichen Produkte). */
+    private Material preferredProduct;
 
     public CustomVillager(UUID id, String name, VillagerJob job) {
         this.id = id;
@@ -48,6 +57,8 @@ public final class CustomVillager {
         this.wallet = 0;
         this.inventory = new HashMap<>();
         this.needs = new EnumMap<>(VillagerNeed.class);
+        this.nutrientLevels = new HashMap<>();
+        this.nutrientCapacities = new HashMap<>();
         this.skills = new HashMap<>();
         this.playerRelations = new HashMap<>();
         this.currentState = VillagerState.IDLE;
@@ -85,18 +96,10 @@ public final class CustomVillager {
 
     // Backward compatibility methods
     public String getProfessionKey() {
-        return job != null ? job.getWorkBuildingKey() : null;
+        return job != null ? job.getProfessionKey() : null;
     }
     public void setProfessionKey(String professionKey) {
-        // Convert string key to VillagerJob enum
-        for (VillagerJob vj : VillagerJob.values()) {
-            if (vj.getWorkBuildingKey().equals(professionKey)) {
-                setJob(vj);
-                return;
-            }
-        }
-        // Default to LABORER if not found
-        setJob(VillagerJob.LABORER);
+        setJob(VillagerJob.fromString(professionKey));
     }
     
     public int getLevel() { return level; }
@@ -129,6 +132,9 @@ public final class CustomVillager {
     // Needs
     public Map<VillagerNeed, Double> getNeeds() { return needs; }
     public double getNeedValue(VillagerNeed need) {
+        if (need == VillagerNeed.HUNGER && !nutrientLevels.isEmpty()) {
+            return calculateAverageNutritionHunger();
+        }
         return needs.getOrDefault(need, 100.0);
     }
     public void setNeedValue(VillagerNeed need, double value) {
@@ -136,13 +142,68 @@ public final class CustomVillager {
     }
     public void decayNeeds(double minutes) {
         for (VillagerNeed need : VillagerNeed.values()) {
+            if (need == VillagerNeed.HUNGER && !nutrientLevels.isEmpty()) {
+                continue;
+            }
             double current = getNeedValue(need);
             double decay = need.getDefaultDecayPerMinute() * minutes;
             setNeedValue(need, current - decay);
         }
     }
     public boolean isNeedCritical(VillagerNeed need) {
-        return getNeedValue(need) <= 25;
+        return getNeedValue(need) <= need.getDefaultCriticalThreshold();
+    }
+
+    public Map<String, Double> getNutrientLevels() { return nutrientLevels; }
+    public Map<String, Double> getNutrientCapacities() { return nutrientCapacities; }
+    public String getActivityDecayKey() { return activityDecayKey; }
+    public void setActivityDecayKey(String activityDecayKey) {
+        this.activityDecayKey = activityDecayKey != null ? activityDecayKey : "IDLE";
+    }
+    public double getNutrientLevel(String nutrientKey) {
+        return nutrientLevels.getOrDefault(nutrientKey.toLowerCase(Locale.ROOT), 0.0);
+    }
+    public void setNutrientLevel(String nutrientKey, double value) {
+        String key = nutrientKey.toLowerCase(Locale.ROOT);
+        double capacity = getNutrientCapacity(key);
+        nutrientLevels.put(key, Math.max(0.0, Math.min(capacity, value)));
+    }
+    public void addNutrientLevel(String nutrientKey, double amount) {
+        setNutrientLevel(nutrientKey, getNutrientLevel(nutrientKey) + amount);
+    }
+    public double getNutrientCapacity(String nutrientKey) {
+        String key = nutrientKey.toLowerCase(Locale.ROOT);
+        return nutrientCapacities.getOrDefault(key, 100.0);
+    }
+    public void setNutrientCapacity(String nutrientKey, double capacity) {
+        nutrientCapacities.put(nutrientKey.toLowerCase(Locale.ROOT), Math.max(1.0, capacity));
+    }
+    public void decayNutrients(double minutes) {
+        if (nutrientLevels.isEmpty()) {
+            return;
+        }
+
+        double decayPerMinute = VillagerNeed.HUNGER.getDefaultDecayPerMinute();
+        for (Map.Entry<String, Double> entry : new HashMap<>(nutrientLevels).entrySet()) {
+            double capacity = getNutrientCapacity(entry.getKey());
+            double decay = decayPerMinute * minutes * (capacity / 100.0);
+            setNutrientLevel(entry.getKey(), entry.getValue() - decay);
+        }
+    }
+
+    public double calculateAverageNutritionHunger() {
+        if (nutrientLevels.isEmpty()) {
+            return needs.getOrDefault(VillagerNeed.HUNGER, 100.0);
+        }
+        double sum = 0.0;
+        int count = 0;
+        for (Map.Entry<String, Double> entry : nutrientLevels.entrySet()) {
+            double capacity = getNutrientCapacity(entry.getKey());
+            double percent = capacity > 0 ? (entry.getValue() / capacity) * 100.0 : 0.0;
+            sum += percent;
+            count++;
+        }
+        return count == 0 ? needs.getOrDefault(VillagerNeed.HUNGER, 100.0) : Math.max(0.0, Math.min(100.0, sum / count));
     }
     
     // Skills
@@ -167,6 +228,10 @@ public final class CustomVillager {
     public long getLastProductionTime() { return lastProductionTime; }
     public void setLastProductionTime(long lastProductionTime) { this.lastProductionTime = lastProductionTime; }
     public long getLastProductionDelta() { return System.currentTimeMillis() - lastProductionTime; }
+    public boolean isProductionPaused() { return productionPaused; }
+    public void setProductionPaused(boolean productionPaused) { this.productionPaused = productionPaused; }
+    public Material getPreferredProduct() { return preferredProduct; }
+    public void setPreferredProduct(Material preferredProduct) { this.preferredProduct = preferredProduct; }
     
     // Buildings
     public UUID getAssignedBedBuildingId() { return assignedBedBuildingId; }
@@ -217,4 +282,3 @@ public final class CustomVillager {
     public UUID getVanillaEntityId() { return vanillaEntityId; }
     public void setVanillaEntityId(UUID vanillaEntityId) { this.vanillaEntityId = vanillaEntityId; }
 }
-

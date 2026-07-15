@@ -14,6 +14,7 @@ import com.example.village.service.SkillTreeManager;
 import com.example.village.service.VillageManager;
 import com.example.village.service.VillagerManager;
 import com.example.village.trading.VillagerLocalTradeUI;
+import com.example.village.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -39,6 +40,9 @@ public class VillagerGuiClickListener implements Listener {
     /** Spieler → aktuell geöffneter Villager */
     private final Map<UUID, UUID> playerToVillager = new HashMap<>();
 
+    /** Spieler → Villager-Kontext im Quest-Menü */
+    private final Map<UUID, UUID> playerToQuestVillager = new HashMap<>();
+
     /** Spieler → wartet auf Villager-Umbenennungs-Input */
     private final Map<UUID, UUID> pendingVillagerRenames = new HashMap<>();
 
@@ -57,6 +61,10 @@ public class VillagerGuiClickListener implements Listener {
         this.villageManager = villageManager;
     }
 
+    private String t(String path, String fallback) {
+        return plugin.getConfigManager().text(path, fallback);
+    }
+
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -73,6 +81,13 @@ public class VillagerGuiClickListener implements Listener {
         if (title.startsWith(JobSelectionGui.TITLE_PREFIX)) {
             event.setCancelled(true);
             handleJobSelectionClick(player, event.getRawSlot());
+            return;
+        }
+
+        // Quest-Menü
+        if (QuestMenuGui.isQuestMenuTitle(title)) {
+            event.setCancelled(true);
+            handleQuestMenuClick(player, event.getCurrentItem());
             return;
         }
 
@@ -111,7 +126,7 @@ public class VillagerGuiClickListener implements Listener {
     private void handleRename(Player player, CustomVillager villager) {
         player.closeInventory();
         pendingVillagerRenames.put(player.getUniqueId(), villager.getId());
-        player.sendMessage("§eGib den neuen Namen ein §7(oder §cabbrechen§7):");
+        player.sendMessage(MessageUtil.color(t("messages.villager-rename-prompt", "§eGib den neuen Namen ein §7(oder §cabbrechen§7):")));
     }
 
     /**
@@ -135,9 +150,11 @@ public class VillagerGuiClickListener implements Listener {
             villageManager.getVillage(villager.getParentVillageId())
                     .ifPresent(villageManager::saveVillage);
         }
-        player.sendMessage("§a✓ Heimatort von §e" + villager.getName()
-                + " §awurde auf deine Position gesetzt §7(" +
-                loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + ")§a.");
+        player.sendMessage(MessageUtil.color(t("messages.villager-home-set", "§a✓ Heimatort von §e%name% §awurde auf deine Position gesetzt §7(%x%, %y%, %z%)§a.")
+                .replace("%name%", villager.getName())
+                .replace("%x%", String.valueOf(loc.getBlockX()))
+                .replace("%y%", String.valueOf(loc.getBlockY()))
+                .replace("%z%", String.valueOf(loc.getBlockZ()))));
     }
 
     /**
@@ -146,7 +163,7 @@ public class VillagerGuiClickListener implements Listener {
     private void handleViewInventory(Player player, CustomVillager villager) {
         player.closeInventory();
         Inventory villagerInv = Bukkit.createInventory(null, 27,
-                "§b" + villager.getName() + " - Inventar");
+                MessageUtil.color(t("ui.villager-inventory.title-prefix", "§b") + villager.getName() + t("ui.villager-inventory.title-suffix", " - Inventar")));
 
         int slot = 0;
         for (Map.Entry<org.bukkit.Material, Integer> entry : villager.getInventory().entrySet()) {
@@ -180,18 +197,84 @@ public class VillagerGuiClickListener implements Listener {
         }
 
         if (village == null) {
-            player.sendMessage("§cKein Dorf gefunden.");
+            player.sendMessage(MessageUtil.color(t("messages.village-not-found", "§cKein Dorf gefunden.")));
             return;
         }
 
         final Village finalVillage = village;
         List<Quest> available = questManager.getAvailableQuests(player, villager, finalVillage);
+        List<Quest> active = questManager.getActiveQuestsForVillager(player.getUniqueId(), villager.getId());
 
         try {
-            new QuestMenuGui(player, available).open();
+            playerToQuestVillager.put(player.getUniqueId(), villager.getId());
+            new QuestMenuGui(player, available, active, plugin).open();
         } catch (Exception e) {
-            player.sendMessage("§cFehler beim Laden der Quests: " + e.getMessage());
+            player.sendMessage(MessageUtil.color(t("messages.quest-load-failed", "§cFehler beim Laden der Quests: %error%").replace("%error%", e.getMessage())));
         }
+    }
+
+    private void handleQuestMenuClick(Player player, ItemStack clicked) {
+        if (clicked == null || clicked.getType().isAir()) {
+            return;
+        }
+
+        UUID villagerId = playerToQuestVillager.get(player.getUniqueId());
+        if (villagerId == null) {
+            player.sendMessage(MessageUtil.color(t("messages.villager-missing", "§cVillager nicht mehr vorhanden.")));
+            return;
+        }
+
+        CustomVillager villager = villagerManager.getVillager(villagerId);
+        if (villager == null) {
+            player.sendMessage(MessageUtil.color(t("messages.villager-missing", "§cVillager nicht mehr vorhanden.")));
+            playerToQuestVillager.remove(player.getUniqueId());
+            return;
+        }
+
+        String questId = QuestMenuGui.getQuestId(clicked, plugin);
+        String action = QuestMenuGui.getQuestAction(clicked, plugin);
+        if (questId == null || action == null) {
+            return;
+        }
+
+        Village village = resolveVillage(villager, player);
+        if (village == null) {
+            player.sendMessage(MessageUtil.color(t("messages.village-not-found", "§cKein Dorf gefunden.")));
+            return;
+        }
+
+        try {
+            if ("accept".equals(action)) {
+                questManager.assignQuestToPlayer(player, villager, questId);
+                MessageUtil.send(player, plugin.getConfigManager().getPrefix(),
+                        t("messages.quest-accepted", "&aQuest angenommen: &e%title%")
+                                .replace("%title%", questManager.getQuestTemplate(questId).getTitle()));
+            } else if ("complete".equals(action)) {
+                Quest quest = questManager.getActiveQuest(player.getUniqueId(), questId);
+                if (quest == null) {
+                    MessageUtil.send(player, plugin.getConfigManager().getPrefix(),
+                            t("messages.quest-not-active", "&cDiese Quest ist nicht aktiv."));
+                    return;
+                }
+                questManager.completeQuest(player, quest, villager, village);
+                MessageUtil.send(player, plugin.getConfigManager().getPrefix(),
+                        t("messages.quest-completed", "&aQuest abgeschlossen: &e%title%")
+                                .replace("%title%", quest.getTitle()));
+            }
+        } catch (QuestManager.QuestException e) {
+            MessageUtil.send(player, plugin.getConfigManager().getPrefix(),
+                    t("messages.quest-action-failed", "&c%error%").replace("%error%", e.getMessage()));
+        }
+
+        player.closeInventory();
+        Bukkit.getScheduler().runTask(plugin, () -> handleQuestMenu(player, villager));
+    }
+
+    private Village resolveVillage(CustomVillager villager, Player player) {
+        if (villager.getParentVillageId() != null) {
+            return villageManager.getVillage(villager.getParentVillageId()).orElse(null);
+        }
+        return villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
     }
 
     /**
@@ -201,18 +284,18 @@ public class VillagerGuiClickListener implements Listener {
         player.closeInventory();
 
         if (villager.getParentVillageId() == null) {
-            player.sendMessage("§cDieser Villager gehört keinem Dorf an.");
+            player.sendMessage(MessageUtil.color(t("messages.villager-no-village", "§cDieser Villager gehört keinem Dorf an.")));
             return;
         }
 
         // Prüfe ob Spieler Mitglied des Dorfes ist
         Village village = villageManager.getVillage(villager.getParentVillageId()).orElse(null);
         if (village == null) {
-            player.sendMessage("§cDorf nicht gefunden.");
+            player.sendMessage(MessageUtil.color(t("messages.village-not-found", "§cDorf nicht gefunden.")));
             return;
         }
         if (!village.isMember(player.getUniqueId())) {
-            player.sendMessage("§cDu bist kein Mitglied dieses Dorfes.");
+            player.sendMessage(MessageUtil.color(t("messages.not-member", "§cDu bist kein Mitglied dieses Dorfes.")));
             return;
         }
 
@@ -252,9 +335,10 @@ public class VillagerGuiClickListener implements Listener {
                     currencyManager,
                     plugin.getLogger()
             );
+            plugin.getInventoryClickEventListener().registerTrading(player.getUniqueId(), tradeUI);
             tradeUI.openTradingUI(player);
         } catch (Exception e) {
-            player.sendMessage("§cFehler beim Öffnen des Handels: " + e.getMessage());
+            player.sendMessage(MessageUtil.color(t("messages.trade-open-failed", "§cFehler beim Öffnen des Handels: %error%").replace("%error%", e.getMessage())));
             plugin.getLogger().warning("Trade UI Fehler: " + e.getMessage());
         }
     }
@@ -268,17 +352,17 @@ public class VillagerGuiClickListener implements Listener {
 
         List<Village> allVillages = new ArrayList<>(villageManager.getAllVillages());
         if (allVillages.isEmpty()) {
-            player.sendMessage("§cKeine anderen Dörfer vorhanden.");
+            player.sendMessage(MessageUtil.color(t("messages.no-other-villages", "§cKeine anderen Dörfer vorhanden.")));
             return;
         }
 
-        player.sendMessage("§6═══ Dorf-Transfer: " + villager.getName() + " ═══");
-        player.sendMessage("§7Aktuelles Dorf: §e" +
+        player.sendMessage(MessageUtil.color(t("messages.villager-transfer-title", "§6═══ Dorf-Transfer: %name% ═══").replace("%name%", villager.getName())));
+        player.sendMessage(MessageUtil.color(t("messages.current-village", "§7Aktuelles Dorf: §e") +
                 (villager.getParentVillageId() != null
                         ? villageManager.getVillage(villager.getParentVillageId())
                         .map(Village::getName).orElse("Unbekannt")
-                        : "Keins"));
-        player.sendMessage("§7Wähle ein Zieldorf (Klicke auf Namen):");
+                        : "Keins")));
+        player.sendMessage(MessageUtil.color(t("messages.select-target-village", "§7Wähle ein Zieldorf (Klicke auf Namen):")));
 
         for (Village v : allVillages) {
             if (villager.getParentVillageId() != null &&
@@ -286,7 +370,7 @@ public class VillagerGuiClickListener implements Listener {
 
             net.md_5.bungee.api.chat.TextComponent component =
                     new net.md_5.bungee.api.chat.TextComponent(
-                            "§a► §e" + v.getName() + " §7(Level " + v.getLevel() + ")");
+                            MessageUtil.translateColorCodes(t("messages.target-village-line", "§a► §e%name% §7(Level %level%)").replace("%name%", v.getName()).replace("%level%", String.valueOf(v.getLevel()))));
             component.setClickEvent(new net.md_5.bungee.api.chat.ClickEvent(
                     net.md_5.bungee.api.chat.ClickEvent.Action.RUN_COMMAND,
                     "/village villager transfer " + villager.getId() + " " + v.getId()
@@ -294,7 +378,7 @@ public class VillagerGuiClickListener implements Listener {
             component.setHoverEvent(new net.md_5.bungee.api.chat.HoverEvent(
                     net.md_5.bungee.api.chat.HoverEvent.Action.SHOW_TEXT,
                     new net.md_5.bungee.api.chat.BaseComponent[]{
-                            new net.md_5.bungee.api.chat.TextComponent("§7Klicken um " + villager.getName() + " nach §e" + v.getName() + " §7zu transferieren")
+                            new net.md_5.bungee.api.chat.TextComponent(MessageUtil.translateColorCodes(t("messages.transfer-hover", "§7Klicken um %villager% nach §e%village% §7zu transferieren").replace("%villager%", villager.getName()).replace("%village%", v.getName())))
                     }
             ));
             player.spigot().sendMessage(component);
@@ -309,7 +393,7 @@ public class VillagerGuiClickListener implements Listener {
             villager.setNeedValue(need, 100);
         }
         villager.adjustMorale(50);
-        player.sendMessage("§a✓ " + villager.getName() + " wurde vollständig geheilt!");
+        player.sendMessage(MessageUtil.color(t("messages.villager-healed", "§a✓ %name% wurde vollständig geheilt!").replace("%name%", villager.getName())));
 
         // Persistenz
         if (villager.getParentVillageId() != null) {
@@ -325,10 +409,10 @@ public class VillagerGuiClickListener implements Listener {
         player.closeInventory();
         String name = villager.getName();
         if (villagerManager.removeVillager(villager)) {
-            player.sendMessage("§c✓ " + name + " wurde aus dem Dorf verjagt!");
+            player.sendMessage(MessageUtil.color(t("messages.villager-banished", "§c✓ %name% wurde aus dem Dorf verjagt!").replace("%name%", name)));
             playerToVillager.remove(player.getUniqueId());
         } else {
-            player.sendMessage("§cFehler: " + name + " konnte nicht entfernt werden.");
+            player.sendMessage(MessageUtil.color(t("messages.villager-banish-failed", "§cFehler: %name% konnte nicht entfernt werden.").replace("%name%", name)));
         }
     }
 
@@ -339,24 +423,44 @@ public class VillagerGuiClickListener implements Listener {
         if (villagerId == null) return;
 
         if (JobSelectionGui.isBackSlot(slot)) {
-            // Zurück zum Villager-Menü
+            JobSelectionGui.clearContext(player);
             pendingJobSelections.remove(player.getUniqueId());
             CustomVillager villager = villagerManager.getVillager(villagerId);
             if (villager != null) {
+                trackVillagerMenu(player, villager);
                 Bukkit.getScheduler().runTask(plugin, () ->
-                        new VillagerMenuGui(villager, player, skillTreeManager).open());
+                        new VillagerMenuGui(villager, player, skillTreeManager,
+                                plugin.getVillagerNutritionService()).open());
+            }
+            return;
+        }
+
+        if (JobSelectionGui.isPrevPageSlot(slot)) {
+            JobSelectionGui.PageContext ctx = JobSelectionGui.getContext(player);
+            CustomVillager villager = villagerManager.getVillager(villagerId);
+            if (ctx != null && villager != null && ctx.page() > 0) {
+                Bukkit.getScheduler().runTask(plugin, () -> new JobSelectionGui(villager, player).open(ctx.page() - 1));
+            }
+            return;
+        }
+
+        if (JobSelectionGui.isNextPageSlot(slot)) {
+            JobSelectionGui.PageContext ctx = JobSelectionGui.getContext(player);
+            CustomVillager villager = villagerManager.getVillager(villagerId);
+            if (ctx != null && villager != null && ctx.page() + 1 < ctx.totalPages()) {
+                Bukkit.getScheduler().runTask(plugin, () -> new JobSelectionGui(villager, player).open(ctx.page() + 1));
             }
             return;
         }
 
         if (!JobSelectionGui.isJobSlot(slot)) return;
 
-        VillagerJob newJob = JobSelectionGui.getJobForSlot(slot);
+        VillagerJob newJob = JobSelectionGui.getJobForSlot(player, slot);
         if (newJob == null) return;
 
         CustomVillager villager = villagerManager.getVillager(villagerId);
         if (villager == null) {
-            player.sendMessage("§cVillager nicht mehr vorhanden.");
+            player.sendMessage(MessageUtil.color(t("messages.villager-missing", "§cVillager nicht mehr vorhanden.")));
             pendingJobSelections.remove(player.getUniqueId());
             player.closeInventory();
             return;
@@ -365,6 +469,7 @@ public class VillagerGuiClickListener implements Listener {
         VillagerJob oldJob = villager.getJob();
         villager.setJob(newJob);
         pendingJobSelections.remove(player.getUniqueId());
+        JobSelectionGui.clearContext(player);
 
         // Persistenz
         if (villager.getParentVillageId() != null) {
@@ -372,12 +477,15 @@ public class VillagerGuiClickListener implements Listener {
                     .ifPresent(villageManager::saveVillage);
         }
 
-        player.sendMessage("§a✓ Job geändert: §e" + (oldJob != null ? oldJob.getDisplayName() : "Keiner")
-                + " §a→ §e" + newJob.getDisplayName());
+        player.sendMessage(MessageUtil.color(t("messages.job-changed", "§a✓ Job geändert: §e%old% §a→ §e%new%")
+                .replace("%old%", oldJob != null ? oldJob.getDisplayName() : "Keiner")
+                .replace("%new%", newJob.getDisplayName())));
 
         // Zurück zum Villager-Menü
         Bukkit.getScheduler().runTask(plugin, () -> {
-            new VillagerMenuGui(villager, player, skillTreeManager).open();
+            trackVillagerMenu(player, villager);
+            new VillagerMenuGui(villager, player, skillTreeManager,
+                    plugin.getVillagerNutritionService()).open();
         });
     }
 
@@ -389,8 +497,13 @@ public class VillagerGuiClickListener implements Listener {
 
     public void untrackVillagerMenu(Player player) {
         playerToVillager.remove(player.getUniqueId());
+        playerToQuestVillager.remove(player.getUniqueId());
         pendingVillagerRenames.remove(player.getUniqueId());
         pendingJobSelections.remove(player.getUniqueId());
+    }
+
+    public UUID getLastInteractedVillager(UUID playerId) {
+        return playerToVillager.get(playerId);
     }
 
     public Map<UUID, UUID> getPendingVillagerRenames() {

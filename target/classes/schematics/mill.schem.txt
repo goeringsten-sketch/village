@@ -1,0 +1,3 @@
+# Standard-Schematic: Mühle
+# Erstelle diese Datei mit WorldEdit: //schem save mill.schem
+# Ersetze diese Platzhalter-Datei mit der echten .schem Datei

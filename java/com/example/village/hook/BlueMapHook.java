@@ -1,6 +1,6 @@
 package com.example.village.hook;
 
-import com.example.village.model.BuildingType;
+
 import com.example.village.model.Village;
 import com.example.village.model.VillageBuilding;
 import org.bukkit.Bukkit;
@@ -28,14 +28,14 @@ public final class BlueMapHook {
         return available;
     }
 
-    public void syncBuildingMarker(Village village, VillageBuilding building, BuildingType type,
+    public void syncBuildingMarker(Village village, VillageBuilding building, String displayName,
                                    WorldEditHook.SchematicData schematicData) {
         if (!available || village == null || building == null || building.getLocation() == null) return;
         try {
             Object blueMapApi = getBlueMapApi();
             if (blueMapApi == null) return;
 
-            String label = type != null ? type.getDisplayName() : building.getTypeKey();
+            String label = (displayName != null && !displayName.isBlank()) ? displayName : building.getTypeKey();
             Location center = calculateCenter(building, schematicData);
             String markerSetId = "village_buildings_" + village.getId();
             String markerId = "building_" + building.getId();

@@ -4,6 +4,8 @@ import com.example.village.VillagePlugin;
 import com.example.village.config.VillageConfigManager;
 import com.example.village.gui.GuiManager;
 import com.example.village.gui.VillageMenuHolder;
+import com.example.village.gui.VillagerJobDetailsGui;
+import com.example.village.gui.VillagerProfessionGui;
 import com.example.village.hook.VaultHook;
 import com.example.village.model.BuildingDefinition;
 import com.example.village.model.CustomVillager;
@@ -70,6 +72,9 @@ public final class GuiClickListener implements Listener {
 
     // Tracks players who are waiting to click a building block for job assignment
     private final Map<UUID, PendingJobAssignment> pendingJobAssignments = new ConcurrentHashMap<>();
+
+    // Tracks players who are waiting to click a bed block for bed assignment
+    private final Map<UUID, PendingBedAssignment> pendingBedAssignments = new ConcurrentHashMap<>();
 
     // Tracks players who are selecting a villager for job assignment from the building menu
     private final Map<UUID, UUID> pendingVillagerAssignments = new ConcurrentHashMap<>();
@@ -165,6 +170,12 @@ public final class GuiClickListener implements Listener {
             handleVillagerInventoryClick(event, villagerInventory);
             return;
         }
+
+        // Handle villager contracts list clicks (Aufträge-Menü)
+        if (inv.getHolder() instanceof com.example.village.gui.VillagerContractsGui contractsGui) {
+            handleVillagerContractsClick(event, contractsGui);
+            return;
+        }
         
         if (!(inv.getHolder() instanceof VillageMenuHolder holder)) return;
 
@@ -191,9 +202,12 @@ public final class GuiClickListener implements Listener {
             case UPGRADES -> handleUpgradesClick(player, slot, holder.getExtraData());
             case ROLE_UPGRADES -> handleRoleUpgradesClick(player, slot, holder.getExtraData());
             case MEMBER_ROLES -> handleMemberRolesClick(player, slot, holder.getExtraData());
-            case VILLAGERS -> handleVillagersClick(player, slot, holder.getExtraData());
+            case VILLAGERS -> handleVillagersClick(player, event, slot, holder.getExtraData());
             case VILLAGER_DETAIL -> handleVillagerDetailClick(player, slot, holder.getExtraData());
             case VILLAGER_CONFIG -> handleVillagerConfigClick(player, slot, holder.getExtraData());
+            case VILLAGER_PROFESSION -> handleVillagerProfessionClick(player, slot, holder.getExtraData());
+            case VILLAGER_JOB_DETAILS -> handleVillagerJobDetailsClick(player, slot, holder.getExtraData());
+            case VILLAGER_PRODUCTION -> handleVillagerProductionClick(player, slot, holder.getExtraData());
             case BUILDING_DIRECTION -> handleBuildingDirectionClick(player, slot, holder.getExtraData());
             case MEMBERS -> handleMembersClick(player, event, slot, holder.getExtraData());
             case QUESTS -> handleQuestsClick(player, slot, holder.getExtraData());
@@ -314,7 +328,7 @@ public final class GuiClickListener implements Listener {
         }
     }
 
-    private boolean checkFoundingRequirements(Player player) {
+    public boolean checkFoundingRequirements(Player player) {
         // Check permission
         String perm = configManager.getFoundingPermission();
         if (!perm.isEmpty() && !player.hasPermission(perm)) {
@@ -633,15 +647,27 @@ public final class GuiClickListener implements Listener {
         // parts.length == 2 -> inside a category content view
         String categoryId = parts[1];
         List<BuildingDefinition> defs = loader.getByCategory(categoryId);
-        List<BuildingDefinition> visible = defs.stream().filter(BuildingDefinition::isShowInMenu).toList();
+        // Build visible list: all show-in-menu defs PLUS non-menu defs that the village already has
+        List<BuildingDefinition> visible = new java.util.ArrayList<>();
+        for (BuildingDefinition d : defs) {
+            if (d.isShowInMenu()) {
+                visible.add(d);
+            } else {
+                boolean has = village.getBuildings().stream()
+                        .anyMatch(b -> b.getTypeKey().equals(d.getId()) && b.isCompleted());
+                if (has) visible.add(d);
+            }
+        }
         int defIndex = slot;
         if (defIndex >= 0 && defIndex < visible.size()) {
             BuildingDefinition def = visible.get(defIndex);
             String typeKey = def.getId();
-            if (village.getLevel() < def.getRequiredVillageLevel()) {
+            if (def.isShowInMenu() && village.getLevel() < def.getRequiredVillageLevel()) {
                 MessageUtil.send(player, configManager.getPrefix(), "&cLevel " + def.getRequiredVillageLevel() + " benoetigt!");
                 return;
             }
+            // Mark as acknowledged when the player interacts with a newly-unlocked item
+            guiManager.acknowledgeItem(player.getUniqueId(), typeKey);
             guiManager.openBuildingManageTypeGui(player, village, typeKey);
         }
     }
@@ -1147,11 +1173,17 @@ public final class GuiClickListener implements Listener {
             }
             case 21 -> {
                 if (!canManageBuilding) { showBarrierFeedback(player, "&cNur Baumeister/Gruender duerfen upgraden."); return; }
+                // Acknowledge the "new upgrade available" highlight on click
+                BuildingDefinition upgradeDefCheck = getDefinition(building.getTypeKey());
+                if (upgradeDefCheck != null) {
+                    guiManager.acknowledgeItem(player.getUniqueId(),
+                            upgradeDefCheck.getId() + ":" + (building.getLevel() + 1));
+                }
                 if (buildingService.upgradeBuilding(player, village, buildingId)) {
                     MessageUtil.send(player, configManager.getPrefix(), "&aGebäude erfolgreich verbessert.");
                 } else {
                     MessageUtil.send(player, configManager.getPrefix(),
-                            "&cUpgrade fehlgeschlagen (Kosten/Level/Status prüfen).");
+                            "&cUpgrade fehlgeschlagen – Kosten, Dorflevel oder Berechtigung prüfen.");
                 }
                 guiManager.openBuildingDetailGui(player, village, buildingId);
             }
@@ -1198,9 +1230,10 @@ public final class GuiClickListener implements Listener {
                         : "%building_type%|%owner%|Level %level%|[Rechtsklick]";
                 MessageUtil.sendClickToCopy(player, configManager.getPrefix(),
                         "&7Aktuelle Vorlage:", current);
-                MessageUtil.sendSuggestCommand(player, configManager.getPrefix(), "&7Platzhalter %building_type%:", appendSignPlaceholder(current, "%building_type%"));
-                MessageUtil.sendSuggestCommand(player, configManager.getPrefix(), "&7Platzhalter %owner%:", appendSignPlaceholder(current, "%owner%"));
-                MessageUtil.sendSuggestCommand(player, configManager.getPrefix(), "&7Platzhalter %level%:", appendSignPlaceholder(current, "%level%"));
+                for (String placeholder : java.util.List.of("%building_type%", "%building_name%", "%owner%", "%level%")) {
+                    MessageUtil.sendSuggestCommand(player, configManager.getPrefix(),
+                            "&7Platzhalter " + placeholder + ":", appendSignPlaceholder(current, placeholder));
+                }
                 MessageUtil.sendRunCommand(player, configManager.getPrefix(),
                         "&7Abbrechen?", "[ABBRECHEN]", "/village cancel");
             }
@@ -1316,11 +1349,13 @@ public final class GuiClickListener implements Listener {
                     guiManager.openUpgradesGui(player, village);
                 }
                 case MAX_LEVEL_REACHED -> MessageUtil.send(player, configManager.getPrefix(),
-                        "&cMax Level erreicht!");
+                        configManager.message("upgrade-max-level"));
                 case NOT_ENOUGH_MONEY -> MessageUtil.send(player, configManager.getPrefix(),
                         configManager.message("upgrade-too-expensive"));
                 case NOT_ENOUGH_POINTS -> MessageUtil.send(player, configManager.getPrefix(),
-                        "&cNicht genuegend Dorfpunkte!");
+                        configManager.message("upgrade-not-enough-points"));
+                case VILLAGE_LEVEL_TOO_LOW -> MessageUtil.send(player, configManager.getPrefix(),
+                        configManager.message("upgrade-village-level-too-low"));
                 default -> {}
             }
         }
@@ -1360,7 +1395,7 @@ public final class GuiClickListener implements Listener {
         guiManager.openRoleUpgradesGui(player, village, upgradeService);
     }
 
-    private void handleVillagersClick(Player player, int slot, String data) {
+    private void handleVillagersClick(Player player, InventoryClickEvent event, int slot, String data) {
         Village village = villageManager.getVillage(UUID.fromString(data)).orElse(null);
         if (village == null) { player.closeInventory(); return; }
         boolean canTrade = player.hasPermission("village.admin") || villageManager.canTradeWithVillagers(village, player.getUniqueId());
@@ -1412,8 +1447,8 @@ public final class GuiClickListener implements Listener {
                 pendingJobAssignments.put(player.getUniqueId(), new PendingJobAssignment(village, villager));
                 pendingVillagerAssignments.remove(player.getUniqueId());
                 player.closeInventory();
-                MessageUtil.send(player, configManager.getPrefix(),
-                        "&eKlicke nun auf einen Block eines fertigen Gebäudes, um den Job zuzuweisen.");
+                MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                        configManager.message("villager-job-start"), "/v abort");
                 return;
             }
         }
@@ -1451,11 +1486,23 @@ public final class GuiClickListener implements Listener {
 
         // Click on existing villager
         if (slot >= 0 && slot < village.getVillagers().size()) {
+            CustomVillager villager = village.getVillagers().get(slot);
+
+            if (event.isRightClick()) {
+                if (!player.hasPermission("village.villager.show.temp") && !player.hasPermission("village.villager.show.on")) {
+                    showBarrierFeedback(player, "&cKeine Berechtigung für Dorfbewohner-Anzeige.");
+                    return;
+                }
+                plugin.getVillagerGlowService().showVillagerTemporarily(player, villager);
+                MessageUtil.send(player, configManager.getPrefix(),
+                        "&aDorfbewohner &e" + villager.getName() + " &atemporär angezeigt.");
+                return;
+            }
+
             if (!canTrade && !canTrain) {
                 showBarrierFeedback(player, "&cKeine Berechtigung fuer Dorfbewohner-Details.");
                 return;
             }
-            CustomVillager villager = village.getVillagers().get(slot);
             guiManager.openVillagerDetailGui(player, village, villager);
         }
     }
@@ -1482,9 +1529,78 @@ public final class GuiClickListener implements Listener {
             }
             case 12 -> {
                 if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen versorgen."); return; }
-                // Feed
-                villagerService.feedVillager(villager, 30);
+                Material food = findFoodToFeed(player, villager);
+                if (food == null) {
+                    MessageUtil.send(player, configManager.getPrefix(), "&cEs gibt kein passendes Futter im Inventar.");
+                    return;
+                }
+                if (!villagerService.feedVillager(player, villager, food)) {
+                    MessageUtil.send(player, configManager.getPrefix(), "&cFuetterung fehlgeschlagen.");
+                    return;
+                }
                 MessageUtil.send(player, configManager.getPrefix(), "&aDorfbewohner gefuettert!");
+                guiManager.openVillagerDetailGui(player, village, villager);
+            }
+            case 13 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
+                guiManager.openVillagerConfigGui(player, village, villager);
+            }
+            case 20 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
+                int totalBeds = villagerService.getTotalBeds(village);
+                int usedBeds = villagerService.getUsedBeds(village);
+                if (villager.getAssignedBedBuildingId() != null) {
+                    usedBeds = Math.max(0, usedBeds - 1);
+                }
+                if (usedBeds >= totalBeds) {
+                    MessageUtil.send(player, configManager.getPrefix(),
+                            "&cKeine freien Betten verfuegbar!");
+                    return;
+                }
+                player.closeInventory();
+                pendingBedAssignments.put(player.getUniqueId(), new PendingBedAssignment(village, villager));
+                MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                        configManager.message("villager-bed-start"), "/v abort");
+            }
+            case 22 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen das Berufsmenu oeffnen."); return; }
+                player.closeInventory();
+                new VillagerProfessionGui(village, villager, player, configManager).open();
+            }
+            case 23 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen Auftraege verwalten."); return; }
+                var contractService = plugin.getVillagerContractService();
+                if (contractService == null) {
+                    MessageUtil.send(player, configManager.getPrefix(), "&cAuftraege sind aktuell nicht verfuegbar.");
+                    return;
+                }
+                player.closeInventory();
+                new com.example.village.gui.VillagerContractsGui(village, villager, player).open();
+            }
+            case 25 -> {
+                if (!canTrade) { showBarrierFeedback(player, "&cDu darfst nicht auf das Lager zugreifen."); return; }
+                openVillagerInventory(player, village, villager);
+            }
+            case 24 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
+                player.closeInventory();
+                pendingJobAssignments.put(player.getUniqueId(),
+                        new PendingJobAssignment(village, villager));
+                MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                        configManager.message("villager-job-start"), "/v abort");
+            }
+            case 28 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
+                if (!"none".equals(villager.getProfessionKey())) {
+                    boolean resetProgress = villagerService.shouldResetProgressOnFire();
+                    villagerService.fireFromJob(village, villager, resetProgress);
+                    MessageUtil.send(player, configManager.getPrefix(),
+                            "&cDorfbewohner wurde vom Job entlassen."
+                                    + (resetProgress ? " Fortschritt zurueckgesetzt." : " Fortschritt beibehalten."));
+                } else {
+                    MessageUtil.send(player, configManager.getPrefix(),
+                            "&cDieser Dorfbewohner hat keinen Job.");
+                }
                 guiManager.openVillagerDetailGui(player, village, villager);
             }
             case 14 -> {
@@ -1501,7 +1617,7 @@ public final class GuiClickListener implements Listener {
                 MessageUtil.send(player, configManager.getPrefix(), "&cDorfbewohner entlassen.");
                 guiManager.openVillagersGui(player, village);
             }
-            case 22 -> guiManager.openVillagersGui(player, village);
+            case 49 -> guiManager.openVillagersGui(player, village);
         }
     }
 
@@ -1520,42 +1636,32 @@ public final class GuiClickListener implements Listener {
         if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
 
         switch (slot) {
-            case 11 -> {
+            case 20 -> {
                 // Assign bed
                 int totalBeds = villagerService.getTotalBeds(village);
                 int usedBeds = villagerService.getUsedBeds(village);
+                if (villager.getAssignedBedBuildingId() != null) {
+                    usedBeds = Math.max(0, usedBeds - 1);
+                }
                 if (usedBeds >= totalBeds) {
                     MessageUtil.send(player, configManager.getPrefix(),
                             "&cKeine freien Betten verfuegbar!");
                     return;
                 }
-                // Auto-assign to first available bed
-                for (com.example.village.model.VillageBuilding building : village.getBuildings()) {
-                    if (!building.isCompleted()) continue;
-                    int capacity = villagerService.getVillagerCapacityForBuilding(building);
-                    if (capacity <= 0) continue;
-                    long assignedCount = village.getVillagers().stream()
-                            .filter(v -> building.getId().equals(v.getAssignedBedBuildingId()))
-                            .count();
-                    if (assignedCount < capacity) {
-                        villager.setAssignedBedBuildingId(building.getId());
-                        villageManager.saveVillage(village);
-                        MessageUtil.send(player, configManager.getPrefix(),
-                                "&aBett zugewiesen!");
-                        break;
-                    }
-                }
-                guiManager.openVillagerConfigGui(player, village, villager);
+                player.closeInventory();
+                pendingBedAssignments.put(player.getUniqueId(), new PendingBedAssignment(village, villager));
+                MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                        configManager.message("villager-bed-start"), "/v abort");
             }
-            case 13 -> {
+            case 24 -> {
                 // Choose job - close menu, prompt in chat
                 player.closeInventory();
                 pendingJobAssignments.put(player.getUniqueId(),
                         new PendingJobAssignment(village, villager));
-                MessageUtil.send(player, configManager.getPrefix(),
-                        "&7Klicke auf einen Block eines Gebaeudes, um dem Dorfbewohner einen Job zuzuweisen.");
+                MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                        configManager.message("villager-job-start"), "/v abort");
             }
-            case 15 -> {
+            case 28 -> {
                 // Fire from job
                 if (!"none".equals(villager.getProfessionKey())) {
                     boolean resetProgress = villagerService.shouldResetProgressOnFire();
@@ -1569,7 +1675,181 @@ public final class GuiClickListener implements Listener {
                 }
                 guiManager.openVillagerConfigGui(player, village, villager);
             }
-            case 22 -> player.closeInventory();
+            case 49 -> player.closeInventory();
+        }
+    }
+
+    private void handleVillagerProfessionClick(Player player, int slot, String data) {
+        if (data == null || !data.contains(":")) return;
+        String[] parts = data.split(":");
+        Village village = villageManager.getVillage(UUID.fromString(parts[0])).orElse(null);
+        if (village == null) { player.closeInventory(); return; }
+
+        UUID villagerId = UUID.fromString(parts[1]);
+        CustomVillager villager = village.getVillagers().stream()
+                .filter(v -> v.getId().equals(villagerId))
+                .findFirst().orElse(null);
+        if (villager == null) { player.closeInventory(); return; }
+
+        boolean canTrain = player.hasPermission("village.admin") || villageManager.canUpgradeVillagers(village, player.getUniqueId());
+        boolean canTrade = player.hasPermission("village.admin") || villageManager.canTradeWithVillagers(village, player.getUniqueId());
+
+        switch (slot) {
+            case 19 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen die Produktion steuern."); return; }
+                new com.example.village.gui.VillagerProductionGui(configManager, villagerService, village, villager, player).open();
+            }
+            case 20 -> {
+                if (!canTrade) { showBarrierFeedback(player, "&cDu darfst nicht auf das Lager zugreifen."); return; }
+                openVillagerInventory(player, village, villager);
+            }
+            case 22 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen Auftraege verwalten."); return; }
+                player.closeInventory();
+                new com.example.village.gui.VillagerContractsGui(village, villager, player).open();
+            }
+            case 24 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
+                player.closeInventory();
+                pendingJobAssignments.put(player.getUniqueId(), new PendingJobAssignment(village, villager));
+                MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                        configManager.message("villager-job-start"), "/v abort");
+            }
+            case 28 -> new VillagerJobDetailsGui(configManager, village, villager, player).open();
+            case 49 -> guiManager.openVillagerDetailGui(player, village, villager);
+        }
+    }
+
+    private void handleVillagerProductionClick(Player player, int slot, String data) {
+        if (data == null || !data.contains(":")) return;
+        String[] parts = data.split(":");
+        Village village = villageManager.getVillage(UUID.fromString(parts[0])).orElse(null);
+        if (village == null) { player.closeInventory(); return; }
+
+        UUID villagerId = UUID.fromString(parts[1]);
+        CustomVillager villager = village.getVillagers().stream()
+                .filter(v -> v.getId().equals(villagerId))
+                .findFirst().orElse(null);
+        if (villager == null) { player.closeInventory(); return; }
+
+        boolean canTrain = player.hasPermission("village.admin") || villageManager.canUpgradeVillagers(village, player.getUniqueId());
+        if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen die Produktion steuern."); return; }
+
+        if (slot == com.example.village.gui.VillagerProductionGui.SLOT_BACK) {
+            new VillagerProfessionGui(village, villager, player, configManager).open();
+            return;
+        }
+        if (slot == com.example.village.gui.VillagerProductionGui.SLOT_PAUSE_TOGGLE) {
+            villager.setProductionPaused(!villager.isProductionPaused());
+            villageManager.saveVillage(village);
+            new com.example.village.gui.VillagerProductionGui(configManager, villagerService, village, villager, player).open();
+            return;
+        }
+        if (slot == com.example.village.gui.VillagerProductionGui.SLOT_ALL_PRODUCTS) {
+            villager.setPreferredProduct(null);
+            villageManager.saveVillage(village);
+            new com.example.village.gui.VillagerProductionGui(configManager, villagerService, village, villager, player).open();
+            return;
+        }
+
+        var profession = configManager.getProfession(villager.getProfessionKey());
+        if (profession == null) return;
+        int index = slot - com.example.village.gui.VillagerProductionGui.PRODUCT_SLOT_START;
+        if (index >= 0 && index < profession.getProduces().size()
+                && slot < com.example.village.gui.VillagerProductionGui.SLOT_ALL_PRODUCTS) {
+            villager.setPreferredProduct(profession.getProduces().get(index));
+            villageManager.saveVillage(village);
+            new com.example.village.gui.VillagerProductionGui(configManager, villagerService, village, villager, player).open();
+        }
+    }
+
+    private void handleVillagerContractsClick(InventoryClickEvent event, com.example.village.gui.VillagerContractsGui contractsGui) {
+        event.setCancelled(true);
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+
+        Village village = contractsGui.getVillage();
+        CustomVillager villager = contractsGui.getVillager();
+        boolean canTrain = player.hasPermission("village.admin") || villageManager.canUpgradeVillagers(village, player.getUniqueId());
+        if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen Auftraege verwalten."); return; }
+
+        int slot = event.getRawSlot();
+        var contractService = plugin.getVillagerContractService();
+        if (contractService == null) {
+            MessageUtil.send(player, configManager.getPrefix(), "&cAuftraege sind aktuell nicht verfuegbar.");
+            return;
+        }
+
+        if (slot == com.example.village.gui.VillagerContractsGui.SLOT_BACK) {
+            new VillagerProfessionGui(village, villager, player, configManager).open();
+            return;
+        }
+
+        if (slot == com.example.village.gui.VillagerContractsGui.SLOT_NEW_CONTRACT) {
+            var created = contractService.createSuggestedContract(village, villager);
+            if (created == null) {
+                MessageUtil.send(player, configManager.getPrefix(),
+                        "&cKein passender Auftrag fuer diesen Beruf gefunden oder kein Partner verfuegbar.");
+                return;
+            }
+            MessageUtil.send(player, configManager.getPrefix(),
+                    "&aAuftrag erstellt (offen): &e" + created.getMaterialKey() + " x" + created.getAmount()
+                            + " &7(" + created.getType().name() + ")");
+            new com.example.village.gui.VillagerContractsGui(village, villager, player).open();
+            return;
+        }
+
+        UUID contractId = contractsGui.getContractIdForSlot(slot);
+        if (contractId == null) return;
+        var contract = village.getContract(contractId);
+        if (contract == null) return;
+
+        boolean rightClick = event.isRightClick();
+        if (rightClick) {
+            if (contractService.cancelContract(village, contractId)) {
+                MessageUtil.send(player, configManager.getPrefix(), "&cAuftrag abgebrochen.");
+            }
+        } else if (contract.getStatus() == com.example.village.model.VillagerContract.Status.OPEN) {
+            if (contractService.acceptContract(village, contractId)) {
+                MessageUtil.send(player, configManager.getPrefix(), "&aAuftrag angenommen - wird abgewickelt, sobald Ware verfuegbar ist.");
+            }
+        }
+        new com.example.village.gui.VillagerContractsGui(village, villager, player).open();
+    }
+
+    private void handleVillagerJobDetailsClick(Player player, int slot, String data) {
+        if (data == null || !data.contains(":")) return;
+        String[] parts = data.split(":");
+        Village village = villageManager.getVillage(UUID.fromString(parts[0])).orElse(null);
+        if (village == null) { player.closeInventory(); return; }
+
+        UUID villagerId = UUID.fromString(parts[1]);
+        CustomVillager villager = village.getVillagers().stream()
+                .filter(v -> v.getId().equals(villagerId))
+                .findFirst().orElse(null);
+        if (villager == null) { player.closeInventory(); return; }
+
+        boolean canTrain = player.hasPermission("village.admin") || villageManager.canUpgradeVillagers(village, player.getUniqueId());
+        boolean canTrade = player.hasPermission("village.admin") || villageManager.canTradeWithVillagers(village, player.getUniqueId());
+
+        switch (slot) {
+            case 19 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen die Produktion steuern."); return; }
+                new com.example.village.gui.VillagerProductionGui(configManager, villagerService, village, villager, player).open();
+            }
+            case 20 -> {
+                if (!canTrade) { showBarrierFeedback(player, "&cDu darfst nicht auf das Lager zugreifen."); return; }
+                openVillagerInventory(player, village, villager);
+            }
+            case 22 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen Auftraege verwalten."); return; }
+                player.closeInventory();
+                new com.example.village.gui.VillagerContractsGui(village, villager, player).open();
+            }
+            case 24 -> {
+                if (!canTrain) { showBarrierFeedback(player, "&cNur Trainer/Gruender duerfen konfigurieren."); return; }
+                guiManager.openVillagerConfigGui(player, village, villager);
+            }
+            case 28, 49 -> new VillagerProfessionGui(village, villager, player, configManager).open();
         }
     }
 
@@ -1604,7 +1884,7 @@ public final class GuiClickListener implements Listener {
     }
 
     private void openVillagerInventory(Player player, Village village, CustomVillager villager) {
-        int maxSlots = getVillagerInventoryMaxSlots(village);
+        int maxSlots = getVillagerInventoryMaxSlots(village, villager);
         com.example.village.gui.VillagerInventoryGui inventoryGui = 
                 new com.example.village.gui.VillagerInventoryGui(villager, village, player, maxSlots);
         inventoryGui.open();
@@ -1675,9 +1955,8 @@ public final class GuiClickListener implements Listener {
         }
     }
 
-    private int getVillagerInventoryMaxSlots(Village village) {
-        int level = Math.max(0, village.getUpgradeLevel("villager-storage"));
-        return Math.min(54, 9 + (level * 9));
+    private int getVillagerInventoryMaxSlots(Village village, CustomVillager villager) {
+        return configManager.getJobStorageCapacity(village, villager);
     }
 
     private boolean hasVillagerInventoryCapacity(CustomVillager villager, int maxSlots, Material material) {
@@ -1693,7 +1972,7 @@ public final class GuiClickListener implements Listener {
             MessageUtil.send(player, configManager.getPrefix(), "&cHalte ein Item in der Mainhand.");
             return;
         }
-        int maxSlots = getVillagerInventoryMaxSlots(village);
+        int maxSlots = getVillagerInventoryMaxSlots(village, villager);
         Material mat = main.getType();
         if (!hasVillagerInventoryCapacity(villager, maxSlots, mat)) {
             MessageUtil.send(player, configManager.getPrefix(), "&cKein freier Villager-Slot vorhanden.");
@@ -1712,7 +1991,7 @@ public final class GuiClickListener implements Listener {
     }
 
     private void depositFromPlayerInventory(Player player, Village village, CustomVillager villager, ItemStack clickedItem, boolean fullStack) {
-        int maxSlots = getVillagerInventoryMaxSlots(village);
+        int maxSlots = getVillagerInventoryMaxSlots(village, villager);
         Material mat = clickedItem.getType();
         if (!hasVillagerInventoryCapacity(villager, maxSlots, mat)) {
             MessageUtil.send(player, configManager.getPrefix(), "&cKein freier Villager-Slot vorhanden.");
@@ -1753,7 +2032,7 @@ public final class GuiClickListener implements Listener {
 
     private boolean upgradeVillagerInventorySlots(Player player, Village village) {
         int currentLevel = Math.max(0, village.getUpgradeLevel("villager-storage"));
-        int currentSlots = getVillagerInventoryMaxSlots(village);
+        int currentSlots = getVillagerInventoryMaxSlots(village, null);
         if (currentSlots >= 54) {
             MessageUtil.send(player, configManager.getPrefix(), "&eVillager-Lager hat bereits das Maximum erreicht.");
             return false;
@@ -1779,7 +2058,7 @@ public final class GuiClickListener implements Listener {
         village.setUpgradeLevel("villager-storage", nextLevel);
         villageManager.saveVillage(village);
         MessageUtil.send(player, configManager.getPrefix(),
-                "&aVillager-Lager aufgewertet: &e" + currentSlots + " -> " + getVillagerInventoryMaxSlots(village) + " Slots");
+                "&aVillager-Lager aufgewertet: &e" + currentSlots + " -> " + getVillagerInventoryMaxSlots(village, null) + " Slots");
         return true;
     }
 
@@ -1895,7 +2174,7 @@ public final class GuiClickListener implements Listener {
                 showBarrierFeedback(player, "&cDu darfst keine Rollen vergeben.");
                 return;
             }
-            guiManager.openMemberRolesGui(player, village, memberId);
+            guiManager.openMemberRolesGui(player, village, memberId, upgradeService);
             return;
         }
     }
@@ -1987,8 +2266,30 @@ public final class GuiClickListener implements Listener {
         if (slot >= 10 && slot <= 18 && (slot % 2 == 0) && idx >= 0 && idx < configurable.length) {
             VillageRole role = configurable[idx];
             String upg = role.upgradeKey();
-            if (upg != null && village.getUpgradeLevel(upg) <= 0) {
-                showBarrierFeedback(player, "&cDiese Rolle ist noch nicht freigeschaltet.");
+            boolean unlocked = upg == null || village.getUpgradeLevel(upg) > 0;
+            if (!unlocked) {
+                if (upgradeService == null) {
+                    showBarrierFeedback(player, "&cDiese Rolle ist noch nicht freigeschaltet.");
+                    return;
+                }
+                UpgradeService.UpgradeResult result = upgradeService.purchaseRoleUnlock(player, village, upg);
+                switch (result) {
+                    case SUCCESS -> {
+                        MessageUtil.send(player, configManager.getPrefix(),
+                                "&aRolle freigeschaltet: &e" + role.getDisplayName());
+                        guiManager.openMemberRolesGui(player, village, memberId, upgradeService);
+                    }
+                    case MAX_LEVEL_REACHED -> MessageUtil.send(player, configManager.getPrefix(),
+                            configManager.message("upgrade-role-already-unlocked"));
+                    case NOT_ENOUGH_MONEY -> MessageUtil.send(player, configManager.getPrefix(),
+                            configManager.message("upgrade-too-expensive"));
+                    case NOT_ENOUGH_POINTS -> MessageUtil.send(player, configManager.getPrefix(),
+                            configManager.message("upgrade-not-enough-points"));
+                    case VILLAGE_LEVEL_TOO_LOW -> MessageUtil.send(player, configManager.getPrefix(),
+                            configManager.message("upgrade-village-level-too-low"));
+                    default -> MessageUtil.send(player, configManager.getPrefix(),
+                            configManager.message("upgrade-failed-generic"));
+                }
                 return;
             }
             java.util.Set<VillageRole> roles = new java.util.HashSet<>(target.getRoles());
@@ -1996,7 +2297,7 @@ public final class GuiClickListener implements Listener {
             roles.remove(VillageRole.FOUNDER);
             roles.add(VillageRole.MEMBER);
             villageManager.setMemberRoles(village, memberId, roles);
-            guiManager.openMemberRolesGui(player, village, memberId);
+            guiManager.openMemberRolesGui(player, village, memberId, upgradeService);
             return;
         }
         if (slot == 40) {
@@ -2036,8 +2337,57 @@ public final class GuiClickListener implements Listener {
         player.openInventory(inv);
     }
 
+    private Material findFoodToFeed(Player player, CustomVillager villager) {
+        var nutritionService = plugin.getVillagerNutritionService();
+        if (nutritionService != null) {
+            return nutritionService.findBestFoodForPlayer(player, villager);
+        }
+
+        Map<String, Map<String, Double>> recoveryMap = configManager.getVillagerFoodRecoveryByItem();
+        Material bestFood = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+
+        for (org.bukkit.inventory.ItemStack stack : player.getInventory().getContents()) {
+            if (stack == null || stack.getType() == Material.AIR || stack.getAmount() <= 0) {
+                continue;
+            }
+            Map<String, Double> recovery = recoveryMap.get(stack.getType().name().toUpperCase(java.util.Locale.ROOT));
+            if (recovery == null || recovery.isEmpty()) {
+                continue;
+            }
+
+            double score = 0.0;
+            double hunger = villager.getNeedValue(com.example.village.model.VillagerNeed.HUNGER);
+            if (recovery.containsKey("hunger")) {
+                score += recovery.get("hunger") * (1.0 + Math.max(0.0, (40.0 - hunger) / 40.0));
+            }
+
+            for (String nutrientKey : configManager.getVillagerNutrientsSection().getKeys(false)) {
+                String normalized = nutrientKey.toLowerCase(java.util.Locale.ROOT);
+                double current = villager.getNutrientLevel(normalized);
+                double capacity = villager.getNutrientCapacity(normalized);
+                double percent = capacity > 0 ? (current / capacity) * 100.0 : 0.0;
+                double missing = Math.max(0.0, 100.0 - percent);
+                if (recovery.containsKey(normalized)) {
+                    score += recovery.get(normalized) * (1.0 + missing / 100.0);
+                }
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestFood = stack.getType();
+            }
+        }
+
+        return bestFood;
+    }
+
     public Map<UUID, PendingJobAssignment> getPendingJobAssignments() {
         return pendingJobAssignments;
+    }
+
+    public Map<UUID, PendingBedAssignment> getPendingBedAssignments() {
+        return pendingBedAssignments;
     }
 
     public Map<UUID, PendingBuildingPlacement> getPendingBuildingPlacements() {
@@ -2057,6 +2407,19 @@ public final class GuiClickListener implements Listener {
         private final CustomVillager villager;
 
         public PendingJobAssignment(Village village, CustomVillager villager) {
+            this.village = village;
+            this.villager = villager;
+        }
+
+        public Village getVillage() { return village; }
+        public CustomVillager getVillager() { return villager; }
+    }
+
+    public static final class PendingBedAssignment {
+        private final Village village;
+        private final CustomVillager villager;
+
+        public PendingBedAssignment(Village village, CustomVillager villager) {
             this.village = village;
             this.villager = villager;
         }

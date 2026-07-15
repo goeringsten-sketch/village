@@ -3,6 +3,7 @@ package com.example.village.gui;
 import com.example.village.model.CustomVillager;
 import com.example.village.model.VillagerSkill;
 import com.example.village.service.SkillTreeManager;
+import com.example.village.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -29,7 +30,8 @@ public class SkillTreeGui {
     }
 
     public void open() {
-        Inventory inv = Bukkit.createInventory(null, ROWS * 9, "§b" + villager.getName() + " - Skills");
+        Inventory inv = Bukkit.createInventory(null, ROWS * 9,
+                MessageUtil.text("ui.skill-tree.title", "§b") + villager.getName() + MessageUtil.text("ui.skill-tree.suffix", " - Skills"));
 
         // Villager-Stats oben
         inv.setItem(0, createLevelItem());
@@ -58,7 +60,7 @@ public class SkillTreeGui {
         if (meta != null) {
             meta.setDisplayName("§c§lLevel " + villager.getLevel());
             meta.setLore(List.of(
-                "§7XP: " + String.format("%.0f", villager.getXp())
+                MessageUtil.text("ui.skill-tree.xp", "§7XP: ") + String.format("%.0f", villager.getXp())
             ));
             item.setItemMeta(meta);
         }
@@ -69,9 +71,9 @@ public class SkillTreeGui {
         ItemStack item = new ItemStack(Material.LIME_CONCRETE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§eErfahrung");
+            meta.setDisplayName(MessageUtil.text("ui.skill-tree.experience", "§eErfahrung"));
             meta.setLore(List.of(
-                "§7Gesamt: " + String.format("%.0f", villager.getXp())
+                MessageUtil.text("ui.skill-tree.total", "§7Gesamt: ") + String.format("%.0f", villager.getXp())
             ));
             item.setItemMeta(meta);
         }
@@ -82,9 +84,9 @@ public class SkillTreeGui {
         ItemStack item = new ItemStack(Material.GOLD_INGOT);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§6Geld");
+            meta.setDisplayName(MessageUtil.text("ui.skill-tree.money", "§6Geld"));
             meta.setLore(List.of(
-                "§7Budget: " + String.format("%.0f", villager.getWallet())
+                MessageUtil.text("ui.skill-tree.budget", "§7Budget: ") + String.format("%.0f", villager.getWallet())
             ));
             item.setItemMeta(meta);
         }
@@ -95,7 +97,7 @@ public class SkillTreeGui {
         ItemStack item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(" ");
+            meta.setDisplayName(MessageUtil.text("ui.generic.empty", " "));
             item.setItemMeta(meta);
         }
         return item;
@@ -116,14 +118,14 @@ public class SkillTreeGui {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§6" + skill.getSkillName() + " §7Lv." + skill.getLevel());
+            meta.setDisplayName(MessageUtil.text("ui.skill-tree.skill-prefix", "§6") + skill.getSkillName() + MessageUtil.text("ui.skill-tree.skill-lvl", " §7Lv.") + skill.getLevel());
             List<String> lore = new ArrayList<>();
-            lore.add("§7" + skillTreeManager.getSkillDescription(skill.getSkillName()));
+            lore.add(MessageUtil.text("ui.skill-tree.description-prefix", "§7") + skillTreeManager.getSkillDescription(skill.getSkillName()));
             lore.add("");
-            lore.add("§eProgress: " + String.format("%.1f", skill.getXpProgress() * 100) + "%");
-            lore.add("§eXP bis Level: " + skill.getXpToNextLevel());
+            lore.add(MessageUtil.text("ui.skill-tree.progress", "§eProgress: ") + String.format("%.1f", skill.getXpProgress() * 100) + "%");
+            lore.add(MessageUtil.text("ui.skill-tree.xp-to-level", "§eXP bis Level: ") + skill.getXpToNextLevel());
             lore.add("");
-            lore.add("§aRechtsklick: Upgrade");
+            lore.add(MessageUtil.text("ui.skill-tree.upgrade-hint", "§aRechtsklick: Upgrade"));
             meta.setLore(lore);
             item.setItemMeta(meta);
         }

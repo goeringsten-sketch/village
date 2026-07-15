@@ -1,17 +1,18 @@
 package com.example.village.config;
 
 import com.example.village.VillagePlugin;
-import com.example.village.model.BuildingType;
+import com.example.village.model.CustomVillager;
 import com.example.village.model.UpgradeType;
+import com.example.village.model.Village;
 import com.example.village.model.VillagerActivity;
 import com.example.village.model.VillagerProfession;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.util.Vector;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -19,7 +20,9 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class VillageConfigManager {
@@ -30,8 +33,11 @@ public final class VillageConfigManager {
     private FileConfiguration playersConfig;
     private FileConfiguration buildingsConfig;
     private FileConfiguration villagersConfig;
+    private FileConfiguration languageConfig;
+    private FileConfiguration questsConfig;
+    private File villageConfigFile;
+    private String languageCode = "de";
 
-    private final Map<String, BuildingType> buildingTypes = new HashMap<>();
     private final Map<String, UpgradeType> upgradeTypes = new HashMap<>();
     private final Map<String, VillagerProfession> professions = new HashMap<>();
 
@@ -44,11 +50,15 @@ public final class VillageConfigManager {
         plugin.reloadConfig();
         checkAndMigrateConfigs();
         config = plugin.getConfig();
+        languageCode = config.getString("language", "de");
         villageConfig = loadSubConfig("config/village.yml");
+        villageConfigFile = new File(plugin.getDataFolder(), "config/village.yml");
         playersConfig = loadSubConfig("config/players.yml");
         buildingsConfig = loadSubConfig("config/buildings.yml");
         villagersConfig = loadSubConfig("config/villagers.yml");
-        loadBuildingTypes();
+        questsConfig = loadSubConfig("config/quests-and-villagers.yml");
+        languageConfig = loadLanguageConfig(languageCode);
+
         loadUpgradeTypes();
         loadProfessions();
     }
@@ -230,64 +240,6 @@ public final class VillageConfigManager {
         return section != null ? section : config.getConfigurationSection(path);
     }
 
-    private void loadBuildingTypes() {
-        buildingTypes.clear();
-        ConfigurationSection section = getSection("buildings.types");
-        if (section == null) return;
-        for (String key : section.getKeys(false)) {
-            ConfigurationSection s = section.getConfigurationSection(key);
-            if (s == null) continue;
-            Material icon = Material.matchMaterial(s.getString("icon", "STONE"));
-            if (icon == null) icon = Material.STONE;
-
-            Map<String, Vector> locations = new HashMap<>();
-            ConfigurationSection locationsSection = s.getConfigurationSection("locations");
-            if (locationsSection != null) {
-                for (String locKey : locationsSection.getKeys(false)) {
-                    ConfigurationSection loc = locationsSection.getConfigurationSection(locKey);
-                    if (loc == null) continue;
-                    locations.put(locKey, new Vector(loc.getDouble("x", 0), loc.getDouble("y", 0), loc.getDouble("z", 0)));
-                }
-            }
-
-            Material workstationBlock = null;
-            String wsBlockName = s.getString("workstation-block");
-            if (wsBlockName != null) workstationBlock = Material.matchMaterial(wsBlockName);
-            Map<String, Material> workstationBlocks = new HashMap<>();
-            ConfigurationSection wsBlocksSection = s.getConfigurationSection("workstation-blocks");
-            if (wsBlocksSection != null) {
-                for (String k : wsBlocksSection.getKeys(false)) {
-                    Material m = Material.matchMaterial(wsBlocksSection.getString(k, ""));
-                    if (m != null) workstationBlocks.put(k, m);
-                }
-            }
-            if (workstationBlock != null && !workstationBlocks.containsKey("workstation")) {
-                workstationBlocks.put("workstation", workstationBlock);
-            }
-
-            buildingTypes.put(key, new BuildingType(
-                    key,
-                    s.getString("display-name", key),
-                    s.getString("description", ""),
-                    icon,
-                    s.getInt("villager-capacity", 0),
-                    getDualAmount(s, "cost", "global", 0),
-                    getDualAmount(s, "cost", "local", 0),
-                    s.getInt("required-level", 1),
-                    s.getString("required-upgrade", null),
-                    s.getString("schematic", key + ".schem"),
-                    locations,
-                    workstationBlock,
-                    s.getInt("max-level", 1),
-                    workstationBlocks,
-                    getDualAmount(s, "upgrade-cost-per-level", "global", 0.0),
-                    getDualAmount(s, "upgrade-cost-per-level", "local", 0.0),
-                    s.getInt("upgrade-points-per-level", 0),
-                    s.getInt("upgrade-required-village-level", s.getInt("required-level", 1)),
-                    s.getString("upgrade-required-unlock", null)
-            ));
-        }
-    }
 
     private void loadUpgradeTypes() {
         upgradeTypes.clear();
@@ -306,7 +258,8 @@ public final class VillageConfigManager {
                     s.getInt("max-level", 10),
                     getDualAmount(s, "cost-per-level", "global", 100),
                     getDualAmount(s, "cost-per-level", "local", 0),
-                    s.getInt("points-per-level", 50)
+                    s.getInt("points-per-level", 50),
+                    s.getInt("required-village-level", 1)
             ));
         }
     }
@@ -338,12 +291,23 @@ public final class VillageConfigManager {
                     } catch (IllegalArgumentException e) {
                         type = VillagerActivity.ActivityType.IDLE;
                     }
+                    List<String> actions = new ArrayList<>();
+                    if (act.contains("actions")) {
+                        actions.addAll(act.getStringList("actions"));
+                    } else if (act.isString("action")) {
+                        actions.add(act.getString("action"));
+                    }
+
                     activitySequence.add(new VillagerActivity(
                             type,
                             act.getString("location-key", ""),
                             act.getInt("duration-ticks", 200),
                             act.getBoolean("interruptable", true),
-                            act.getString("description", "")
+                            act.getString("description", ""),
+                            act.getInt("delay-ticks", 0),
+                            actions,
+                            act.getInt("required-village-level", 0),
+                            act.getString("required-upgrade", null)
                     ));
                 }
             }
@@ -361,8 +325,61 @@ public final class VillageConfigManager {
         }
     }
 
-    public String message(String path) { return config.getString("messages." + path, path); }
-    public String getPrefix() { return config.getString("messages.prefix", "&8[&6Dorf&8] &7"); }
+    public String message(String path) {
+        String langMessage = languageConfig != null ? languageConfig.getString("messages." + path) : null;
+        if (langMessage != null) return langMessage;
+        return config.getString("messages." + path, path);
+    }
+
+    public String text(String path, String fallback) {
+        String langText = languageConfig != null ? languageConfig.getString(path) : null;
+        if (langText != null && !langText.isBlank()) {
+            return langText;
+        }
+        String configText = config.getString(path);
+        if (configText != null && !configText.isBlank()) {
+            return configText;
+        }
+        return fallback != null ? fallback : path;
+    }
+
+    public String getPrefix() {
+        String langPrefix = languageConfig != null ? languageConfig.getString("messages.prefix") : null;
+        if (langPrefix != null) return langPrefix;
+        return config.getString("messages.prefix", "&8[&6Dorf&8] &7");
+    }
+
+    public boolean isVillagerRevivalEnabled() {
+        return getBoolean("villagers.revival.enabled", false);
+    }
+
+    public String getVillagerRevivalCurrencyType() {
+        return getString("villagers.revival.currency-type", "global");
+    }
+
+    public double getVillagerRevivalBaseCost() {
+        return getDouble("villagers.revival.base-cost", 0.0);
+    }
+
+    public double getVillagerRevivalCostIncreasePerUse() {
+        return getDouble("villagers.revival.cost-increase-per-use", 0.0);
+    }
+
+    public double getVillagerRevivalMaxCost() {
+        return getDouble("villagers.revival.max-cost", 0.0);
+    }
+
+    public long getVillagerRevivalBaseCooldownSeconds() {
+        return Math.max(0L, Math.round(getDouble("villagers.revival.base-cooldown-seconds", 0.0)));
+    }
+
+    public long getVillagerRevivalCooldownIncreasePerUseSeconds() {
+        return Math.max(0L, Math.round(getDouble("villagers.revival.cooldown-increase-per-use-seconds", 0.0)));
+    }
+
+    public long getVillagerRevivalMaxCooldownSeconds() {
+        return Math.max(0L, Math.round(getDouble("villagers.revival.max-cooldown-seconds", 0.0)));
+    }
 
     public int getWellMaxAirBlocks() { return getInt("founding.well.max-air-blocks", 10); }
     public String getFoundingPermission() { return getString("founding.requirements.permission", "village.create"); }
@@ -458,6 +475,38 @@ public final class VillageConfigManager {
     public boolean isWalkBorderDebug() { return getBoolean("territory.debug-walk-border", false); }
     public boolean isBorderEntryDebug() { return getBoolean("territory.debug-border-entry", false); }
 
+    public void setBorderEntryDebug(boolean enabled) {
+        ensureVillageConfigFile();
+        villageConfig.set("territory.debug-border-entry", enabled);
+        try {
+            villageConfig.save(villageConfigFile);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Konnte territory.debug-border-entry nicht speichern: " + e.getMessage());
+        }
+    }
+
+    private FileConfiguration loadLanguageConfig(String code) {
+        String normalized = (code == null || code.isBlank()) ? "de" : code.trim().toLowerCase(Locale.ROOT);
+        File file = new File(plugin.getDataFolder(), "lang/" + normalized + ".yml");
+        if (file.exists()) {
+            return YamlConfiguration.loadConfiguration(file);
+        }
+
+        String resourcePath = "lang/" + normalized + ".yml";
+        if (plugin.getResource(resourcePath) != null) {
+            plugin.saveResource(resourcePath, false);
+            if (file.exists()) {
+                return YamlConfiguration.loadConfiguration(file);
+            }
+        }
+
+        if (!"de".equals(normalized)) {
+            return loadLanguageConfig("de");
+        }
+
+        return new YamlConfiguration();
+    }
+
     public int getMaxLevel() { return getInt("levels.max-level", 50); }
 
     public int getPointsForLevel(int level) {
@@ -537,10 +586,56 @@ public final class VillageConfigManager {
     // Villager Glow / Display config
     public int getVillagerGlowTempDurationTicks() { return getInt("villager.glow-config.temp-duration-ticks", 300); }
 
+    public int getJobStorageBaseSlots(String professionKey) {
+        if (professionKey == null || professionKey.isBlank()) {
+            return 9;
+        }
+        return getInt("villagers.job-storage.base-slots." + professionKey, 9);
+    }
+
+    public int getJobStorageSlotsPerUpgradeLevel(String professionKey) {
+        if (professionKey == null || professionKey.isBlank()) {
+            return 9;
+        }
+        return getInt("villagers.job-storage.slots-per-level." + professionKey, 9);
+    }
+
+    public int getJobStorageMaxSlots(String professionKey) {
+        if (professionKey == null || professionKey.isBlank()) {
+            return 54;
+        }
+        return getInt("villagers.job-storage.max-slots." + professionKey, 54);
+    }
+
+    /**
+     * Kombinierte Job-Lager-Kapazitaet (Basis + Dorf-Upgrade-Stufen, gekappt auf das Maximum).
+     * Zentrale Quelle der Wahrheit, damit GUIs und Listener nicht mehr eigene Kopien
+     * dieser Berechnung pflegen (und dabei auseinanderlaufen).
+     */
+    public int getJobStorageCapacity(Village village, CustomVillager villager) {
+        String professionKey = villager != null ? villager.getProfessionKey() : null;
+        int level = village != null ? Math.max(0, village.getUpgradeLevel("villager-storage")) : 0;
+        int base = getJobStorageBaseSlots(professionKey);
+        int perLevel = getJobStorageSlotsPerUpgradeLevel(professionKey);
+        int max = getJobStorageMaxSlots(professionKey);
+        return Math.min(max, base + (level * perLevel));
+    }
+
+    /**
+     * Prueft, ob im Job-Lager noch Platz fuer ein (ggf. neues) Material ist.
+     * Bereits vorhandene Materialtypen duerfen immer weiter aufgestockt werden,
+     * nur fuer neue Materialtypen greift das Slot-Limit.
+     */
+    public boolean hasJobStorageCapacity(Village village, CustomVillager villager, Material material) {
+        if (villager == null || material == null) return false;
+        if (villager.getInventory().containsKey(material)) {
+            return true;
+        }
+        return villager.getInventory().size() < getJobStorageCapacity(village, villager);
+    }
+
     public Map<String, UpgradeType> getUpgradeTypes() { return upgradeTypes; }
     public UpgradeType getUpgradeType(String key) { return upgradeTypes.get(key); }
-    public Map<String, BuildingType> getBuildingTypes() { return buildingTypes; }
-    public BuildingType getBuildingType(String key) { return buildingTypes.get(key); }
     public Map<String, VillagerProfession> getProfessions() { return professions; }
     public VillagerProfession getProfession(String key) { return professions.get(key); }
 
@@ -554,6 +649,281 @@ public final class VillageConfigManager {
     public double getNeedCritical(String need) { return getDouble("villagers.needs." + need + ".critical-threshold", 20.0); }
     public int getSkillTreeMaxLevel() { return getInt("villagers.skill-tree.max-skill-level", 10); }
     public int getSkillTreeXpPerLevel() { return getInt("villagers.skill-tree.xp-per-level", 100); }
+    public int getVillagerNutrientStorageCapacity() { return getInt("villagers.nutrient-storage.default-capacity-per-nutrient", 100); }
+    public ConfigurationSection getVillagerNutrientStorageSection() { return getSection("villagers.nutrient-storage"); }
+    public int getVillagerHungerCriticalThreshold() {
+        return (int) getNeedCritical("hunger");
+    }
+    public int getVillagerHungerDamageThreshold() {
+        return getInt("villagers.needs.hunger.damage-threshold",
+                getInt("villagers.hunger.damage-threshold", 15));
+    }
+    public int getVillagerHungerDamageIntervalTicks() {
+        return getInt("villagers.needs.hunger.damage-interval-ticks",
+                getInt("villagers.hunger.damage-interval-ticks", 400));
+    }
+    public double getVillagerHungerDamagePerInterval() {
+        return getDouble("villagers.needs.hunger.damage-per-interval",
+                getDouble("villagers.hunger.damage-per-interval", 0.5));
+    }
+    public double getNutrientDecayPerMinute(String nutrientKey) {
+        ConfigurationSection section = getVillagerNutrientsSection();
+        if (section != null) {
+            ConfigurationSection nutrient = section.getConfigurationSection(nutrientKey);
+            if (nutrient != null && nutrient.contains("decay-per-minute")) {
+                return nutrient.getDouble("decay-per-minute");
+            }
+        }
+        ConfigurationSection storage = getVillagerNutrientStorageSection();
+        if (storage != null && storage.contains("decay-per-minute")) {
+            return storage.getDouble("decay-per-minute");
+        }
+        return getNeedDecay("hunger");
+    }
+    public double getNutrientActivityMultiplier(String activityKey, String nutrientKey) {
+        if (activityKey == null || nutrientKey == null) {
+            return 1.0;
+        }
+
+        ConfigurationSection section = getSection("villagers.nutrition.activity-nutrient-multipliers." + activityKey);
+        if (section != null && section.contains(nutrientKey)) {
+            return section.getDouble(nutrientKey, 1.0);
+        }
+        return 1.0;
+    }
+    public double getNutrientDecayByActivity(String activityKey) {
+        ConfigurationSection storage = getVillagerNutrientStorageSection();
+        if (storage != null) {
+            ConfigurationSection byActivity = storage.getConfigurationSection("decay-by-activity");
+            if (byActivity != null && byActivity.contains(activityKey)) {
+                return byActivity.getDouble(activityKey);
+            }
+        }
+        ConfigurationSection schedule = getSection("villagers.schedule.nutrient-decay-by-activity");
+        if (schedule != null && schedule.contains(activityKey)) {
+            return schedule.getDouble(activityKey);
+        }
+        return 1.0;
+    }
+    public boolean isBalancedDietEnabled() {
+        return getBoolean("villagers.nutrition.balanced-diet.enabled", true);
+    }
+    public double getBalancedDietLowNutrientThreshold() {
+        return getDouble("villagers.nutrition.balanced-diet.low-nutrient-threshold", 20.0);
+    }
+    public double getBalancedDietProductionPenalty() {
+        return getDouble("villagers.nutrition.balanced-diet.production-penalty", 0.10);
+    }
+    public double getBalancedDietExcessSugarThreshold() {
+        return getDouble("villagers.nutrition.balanced-diet.excess-sugar-threshold", 80.0);
+    }
+    public double getSeasonalDecayMultiplier(long worldTime) {
+        if (!getBoolean("villagers.nutrition.seasonal.enabled", true)) {
+            return 1.0;
+        }
+        long winterStart = getInt("villagers.nutrition.seasonal.winter-start", 12000);
+        long winterEnd = getInt("villagers.nutrition.seasonal.winter-end", 6000);
+        boolean winter = worldTime >= winterStart || worldTime < winterEnd;
+        return winter
+                ? getDouble("villagers.nutrition.seasonal.winter-decay-multiplier", 1.25)
+                : getDouble("villagers.nutrition.seasonal.summer-decay-multiplier", 0.9);
+    }
+    public double getJobDecayMultiplier(String professionKey) {
+        if (professionKey == null) {
+            return 1.0;
+        }
+        return getDouble("villagers.nutrition.job-decay-multipliers." + professionKey, 1.0);
+    }
+    public boolean isHungerWarningsEnabled() {
+        return getBoolean("villagers.nutrition.warnings.enabled", true);
+    }
+    public double getHungerWarningThreshold() {
+        return getDouble("villagers.nutrition.warnings.threshold", 25.0);
+    }
+    public int getHungerWarningCooldownSeconds() {
+        return getInt("villagers.nutrition.warnings.cooldown-seconds", 300);
+    }
+    public String getNutrientCapacityUpgradeKey() {
+        return getString("villagers.nutrition.upgrades.nutrient-capacity-level-key", "nutrient-capacity");
+    }
+    public double getNutrientCapacityPerUpgradeLevel() {
+        return getDouble("villagers.nutrition.upgrades.capacity-per-level", 15.0);
+    }
+    public List<String> getBakerPriorityFoods() {
+        List<?> list = getList("villagers.nutrition.baker-priority-foods");
+        if (list == null || list.isEmpty()) {
+            return List.of("BREAD", "CAKE", "COOKIE");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object entry : list) {
+            result.add(String.valueOf(entry));
+        }
+        return result;
+    }
+    public boolean isAutoFeedFromChestEnabled() {
+        return getBoolean("villagers.nutrition.auto-feed-from-chest", true);
+    }
+    public int getScheduleGetFood() {
+        return getInt("villagers.schedule.get-food", 3000);
+    }
+    public Map<String, Double> getVillagerFoodRecovery() {
+        Map<String, Double> values = new LinkedHashMap<>();
+        ConfigurationSection section = getSection("villagers.feeding.recovery");
+        if (section == null) {
+            section = getSection("villagers.food.recovery");
+        }
+        if (section != null) {
+            for (String key : section.getKeys(false)) {
+                ConfigurationSection itemSection = section.getConfigurationSection(key);
+                if (itemSection != null) {
+                    values.put(key.toUpperCase(Locale.ROOT), itemSection.getDouble("hunger", 0.0));
+                } else {
+                    values.put(key.toUpperCase(Locale.ROOT), section.getDouble(key, 0.0));
+                }
+            }
+        }
+        return values;
+    }
+
+    public Map<String, Map<String, Double>> getVillagerFoodRecoveryByItem() {
+        Map<String, Map<String, Double>> result = new LinkedHashMap<>();
+        ConfigurationSection section = getSection("villagers.feeding.recovery");
+        if (section == null) {
+            section = getSection("villagers.food.recovery");
+        }
+        if (section == null) {
+            return result;
+        }
+        for (String itemKey : section.getKeys(false)) {
+            ConfigurationSection itemSection = section.getConfigurationSection(itemKey);
+            if (itemSection == null) {
+                result.put(itemKey.toUpperCase(Locale.ROOT), Map.of("hunger", section.getDouble(itemKey, 0.0)));
+                continue;
+            }
+            Map<String, Double> nutrientValues = new LinkedHashMap<>();
+            for (String nutrientKey : itemSection.getKeys(false)) {
+                if (isFoodRecoveryMetaKey(nutrientKey)) {
+                    continue;
+                }
+                nutrientValues.put(nutrientKey.toLowerCase(Locale.ROOT), itemSection.getDouble(nutrientKey, 0.0));
+            }
+            result.put(itemKey.toUpperCase(Locale.ROOT), nutrientValues);
+        }
+        return result;
+    }
+
+    public static boolean isFoodRecoveryMetaKey(String key) {
+        if (key == null) {
+            return true;
+        }
+        String normalized = key.toLowerCase(Locale.ROOT);
+        return normalized.equals("instant-percent") || normalized.equals("instant_percent")
+                || normalized.equals("recovery-seconds") || normalized.equals("recovery_duration_seconds")
+                || normalized.equals("recovery-duration-seconds");
+    }
+
+    public boolean isAllowPlayerFeeding() {
+        return getBoolean("villagers.feeding.allow-player-feeding", true);
+    }
+
+    public boolean isAllowSelfFeeding() {
+        return getBoolean("villagers.feeding.allow-self-feeding", true);
+    }
+
+    public int getFeedIntervalSeconds() {
+        return getInt("villagers.feeding.feed-interval-seconds", 5);
+    }
+
+    public double getDefaultFeedInstantPercent() {
+        return getDouble("villagers.feeding.default-instant-percent", 100.0);
+    }
+
+    public double getDefaultFeedRecoverySeconds() {
+        return getDouble("villagers.feeding.default-recovery-seconds", 0.0);
+    }
+
+    public boolean isPeriodicRecoveryEnabled() {
+        return getBoolean("villagers.feeding.periodic-recovery.enabled", true);
+    }
+
+    public int getPeriodicRecoveryTickIntervalSeconds() {
+        return getInt("villagers.feeding.periodic-recovery.tick-interval-seconds", 1);
+    }
+
+    public double getFeedInstantPercent(String itemKey) {
+        ConfigurationSection section = getSection("villagers.feeding.recovery." + itemKey);
+        if (section != null && section.contains("instant-percent")) {
+            return section.getDouble("instant-percent");
+        }
+        return getDefaultFeedInstantPercent();
+    }
+
+    public double getFeedRecoverySeconds(String itemKey) {
+        ConfigurationSection section = getSection("villagers.feeding.recovery." + itemKey);
+        if (section != null) {
+            if (section.contains("recovery-seconds")) {
+                return section.getDouble("recovery-seconds");
+            }
+            if (section.contains("recovery-duration-seconds")) {
+                return section.getDouble("recovery-duration-seconds");
+            }
+        }
+        return getDefaultFeedRecoverySeconds();
+    }
+
+    public double getFeedHungerValue(String itemKey) {
+        ConfigurationSection section = getSection("villagers.feeding.recovery." + itemKey);
+        if (section != null && section.contains("hunger")) {
+            return section.getDouble("hunger");
+        }
+        return 0.0;
+    }
+
+    public boolean isHungerEntityDamageEnabled() {
+        return getBoolean("villagers.needs.hunger.entity-damage.enabled", false);
+    }
+
+    public double getHungerEntityDamageAmount() {
+        return getDouble("villagers.needs.hunger.entity-damage.amount", 1.0);
+    }
+
+    public int getNutrientMaxDurationSeconds(String nutrientKey) {
+        ConfigurationSection section = getVillagerNutrientsSection();
+        if (section == null) {
+            return 300;
+        }
+        ConfigurationSection nutrient = section.getConfigurationSection(nutrientKey);
+        if (nutrient == null) {
+            return 300;
+        }
+        return nutrient.getInt("max-duration-seconds", nutrient.getInt("duration-seconds", 60) * 3);
+    }
+
+    public boolean isNutrientStackDuration(String nutrientKey) {
+        ConfigurationSection section = getVillagerNutrientsSection();
+        if (section == null) {
+            return true;
+        }
+        ConfigurationSection nutrient = section.getConfigurationSection(nutrientKey);
+        if (nutrient == null) {
+            return true;
+        }
+        return nutrient.getBoolean("stack-duration", true);
+    }
+
+    public boolean isActivityEndCostEnabled() {
+        return getBoolean("villagers.nutrition.activity-end-cost.enabled", true);
+    }
+
+    public double getActivityEndCostMultiplier(String activityType) {
+        if (activityType == null) {
+            return 1.0;
+        }
+        return getDouble("villagers.nutrition.activity-end-cost.multipliers." + activityType.toUpperCase(Locale.ROOT), 1.0);
+    }
+
+    public ConfigurationSection getVillagerFeedingSection() { return getSection("villagers.feeding"); }
+    public ConfigurationSection getVillagerNutrientsSection() { return getSection("villagers.nutrients"); }
 
     public int getUpgradeAreaPerLevel() { return getInt("upgrades.border-expansion.area-per-level", 2000); }
     public int getUpgradeVillagersPerLevel() { return getInt("upgrades.max-villagers.villagers-per-level", 2); }
@@ -600,4 +970,34 @@ public final class VillageConfigManager {
     }
 
     public FileConfiguration getConfig() { return config; }
+
+    private void ensureVillageConfigFile() {
+        if (villageConfigFile == null) {
+            villageConfigFile = new File(plugin.getDataFolder(), "config/village.yml");
+        }
+    }
+
+    public FileConfiguration getQuestsConfig() {
+        return questsConfig;
+    }
+
+    public boolean isChunkOptimizationEnabled() {
+        if (questsConfig == null) return true;
+        return questsConfig.getBoolean("performance.chunk-optimization", true);
+    }
+
+    public int getMaxUpdatesPerTick() {
+        if (questsConfig == null) return 10;
+        return questsConfig.getInt("performance.max-updates-per-tick", 10);
+    }
+
+    public int getGlobalMaxUpdatesPerTick() {
+        if (questsConfig == null) return getMaxUpdatesPerTick();
+        return Math.max(1, questsConfig.getInt("performance.global-max-updates-per-tick", getMaxUpdatesPerTick()));
+    }
+
+    public int getBatchUpdateInterval() {
+        if (questsConfig == null) return 20;
+        return questsConfig.getInt("performance.batch-update-interval", 20);
+    }
 }

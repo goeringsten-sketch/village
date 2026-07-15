@@ -1,0 +1,2 @@
+# Standard-Schematic: Watchtower
+# Erstelle diese Datei mit WorldEdit: //schem save watchtower.schem

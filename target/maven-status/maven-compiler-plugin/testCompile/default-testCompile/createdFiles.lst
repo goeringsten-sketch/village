@@ -1,0 +1,5 @@
+com/example/village/trading/TradingUITest.class
+com/example/village/currency/LocalCurrencyManagerTest.class
+com/example/village/service/SchematicMetaLoaderTest.class
+com/example/village/currency/CurrencyConverterTest.class
+com/example/village/QuestManagerTest.class

@@ -1,0 +1,30 @@
+
+[INFO] Building Village 1.0.0
+[INFO] Running com.example.village.building.BlockCheckValidatorStructureTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.112 s -- in 
+com.example.village.building.BlockCheckValidatorStructureTest
+[INFO] Running com.example.village.building.BuildingConfigDorfzentrumTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.161 s -- in 
+com.example.village.building.BuildingConfigDorfzentrumTest
+[INFO] Running com.example.village.building.BuildingConfigMaxInstancesTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in 
+com.example.village.building.BuildingConfigMaxInstancesTest
+[INFO] Running com.example.village.building.DorfzentrumBuildingModelTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.082 s -- in 
+com.example.village.building.DorfzentrumBuildingModelTest
+[INFO] Running com.example.village.building.LightLimitsConfigTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in 
+com.example.village.building.LightLimitsConfigTest
+[INFO] Running com.example.village.building.QuestConfigTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in 
+com.example.village.building.QuestConfigTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in 
+com.example.village.currency.CurrencyConverterTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in 
+com.example.village.currency.LocalCurrencyManagerTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in Trading UI Tests
+[INFO] Tests run: 84, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Building jar: C:\Users\Sten\Desktop\village\target\village-1.0.0.jar
+[INFO] BUILD SUCCESS
+
+

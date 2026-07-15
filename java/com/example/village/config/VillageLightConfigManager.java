@@ -10,6 +10,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -19,6 +20,7 @@ import java.util.Set;
 public final class VillageLightConfigManager {
 
     private final VillagePlugin plugin;
+    private File configFile;
     private FileConfiguration config;
     private boolean circularStages = false;
     private List<LightDistanceStep> steps = List.of();
@@ -32,16 +34,16 @@ public final class VillageLightConfigManager {
     }
 
     public void load() {
-        File file = new File(plugin.getDataFolder(), "config/light-limits.yml");
-        if (!file.exists()) {
+        configFile = new File(plugin.getDataFolder(), "config/light-limits.yml");
+        if (!configFile.exists()) {
             // Fallback: Prüfe ob die Datei im alten Pfad noch existiert
             File oldFile = new File(plugin.getDataFolder(), "light-limits.yml");
             if (oldFile.exists()) {
-                file = oldFile;
+                configFile = oldFile;
             }
         }
 
-        config = YamlConfiguration.loadConfiguration(file);
+        config = YamlConfiguration.loadConfiguration(configFile);
         loadStageShape();
         loadSteps();
         loadWorlds();
@@ -200,6 +202,16 @@ public final class VillageLightConfigManager {
         return Math.max(0, Math.min(15, config.getInt("light-control.default-max-light-level", 15)));
     }
 
+    /**
+     * Y-Level unterhalb dessen Spieler als „im Untergrund" gelten.
+     * 2D-Lichtquellen (Dorfgebiet, Straßen, Regionen) werden dann ignoriert.
+     * Nur POIs mit expliziter Y-Koordinate gelten noch.
+     * Wert -999 = Feature deaktiviert.
+     */
+    public int getUndergroundMaxLevel() {
+        return config.getInt("light-control.underground-max-level", -999);
+    }
+
     public List<LightDistanceStep> getSteps() {
         return steps;
     }
@@ -222,6 +234,54 @@ public final class VillageLightConfigManager {
 
     public List<LightPathSource> getPathSources() {
         return pathSources;
+    }
+
+    public boolean addPointSource(String key, String world, double x, double y, double z, double radius) {
+        if (!ensureConfigLoaded()) return false;
+        if (key == null || key.isBlank() || world == null || world.isBlank()) return false;
+        config.set("light-control.points-of-interest." + key + ".world", world);
+        config.set("light-control.points-of-interest." + key + ".x", x);
+        config.set("light-control.points-of-interest." + key + ".y", y);
+        config.set("light-control.points-of-interest." + key + ".z", z);
+        config.set("light-control.points-of-interest." + key + ".radius", radius);
+        saveAndReload();
+        return true;
+    }
+
+    public boolean addRegionSource(String key, String world, String regionId, double baseRadius) {
+        if (!ensureConfigLoaded()) return false;
+        if (key == null || key.isBlank() || world == null || world.isBlank() || regionId == null || regionId.isBlank()) return false;
+        config.set("light-control.worldguard-regions." + key + ".world", world);
+        config.set("light-control.worldguard-regions." + key + ".region-id", regionId);
+        config.set("light-control.worldguard-regions." + key + ".base-radius", baseRadius);
+        saveAndReload();
+        return true;
+    }
+
+    public boolean addPathSource(String key, String world, double fromX, double fromZ, double toX, double toZ, double radius) {
+        if (!ensureConfigLoaded()) return false;
+        if (key == null || key.isBlank() || world == null || world.isBlank()) return false;
+        config.set("light-control.paths." + key + ".world", world);
+        config.set("light-control.paths." + key + ".from.x", fromX);
+        config.set("light-control.paths." + key + ".from.z", fromZ);
+        config.set("light-control.paths." + key + ".to.x", toX);
+        config.set("light-control.paths." + key + ".to.z", toZ);
+        config.set("light-control.paths." + key + ".radius", radius);
+        saveAndReload();
+        return true;
+    }
+
+    private boolean ensureConfigLoaded() {
+        return config != null && configFile != null;
+    }
+
+    private void saveAndReload() {
+        try {
+            config.save(configFile);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Konnte light-limits.yml nicht speichern: " + e.getMessage());
+        }
+        load();
     }
 
     public int getMaxLightLevelForDistance(int distance) {

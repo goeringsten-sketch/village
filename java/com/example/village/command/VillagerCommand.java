@@ -7,6 +7,7 @@ import com.example.village.model.Village;
 import com.example.village.service.QuestManager;
 import com.example.village.service.VillageManager;
 import com.example.village.service.VillagerManager;
+import com.example.village.util.MessageUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -76,11 +77,9 @@ public class VillagerCommand implements CommandExecutor, TabCompleter {
             return false;
         }
 
-        String jobName = args[1].toUpperCase();
-        VillagerJob job;
-        try {
-            job = VillagerJob.valueOf(jobName);
-        } catch (IllegalArgumentException e) {
+        String jobName = args[1];
+        VillagerJob job = VillagerJob.fromString(jobName);
+        if (job == VillagerJob.LABORER && !"none".equalsIgnoreCase(jobName) && !"laborer".equalsIgnoreCase(jobName)) {
             player.sendMessage(prefix + "§cUnbekannter Job: " + jobName);
             return false;
         }
@@ -192,7 +191,7 @@ public class VillagerCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleQuestCmd(Player player, String[] args) {
         if (args.length < 2) {
-            player.sendMessage(prefix + "§cNutzung: /villager quest <list|complete> [Villager]");
+            player.sendMessage(prefix + "§cNutzung: /villager quest <list|accept|complete> [QuestId] [VillagerName]");
             return false;
         }
 
@@ -200,15 +199,103 @@ public class VillagerCommand implements CommandExecutor, TabCompleter {
 
         if ("list".equals(action)) {
             var quests = questManager.getPlayerQuests(player.getUniqueId());
-            player.sendMessage(prefix + "§eDeine Quests:");
+            player.sendMessage(prefix + "§eDeine aktiven Quests:");
+            if (quests.isEmpty()) {
+                player.sendMessage("§7  (keine aktiven Quests)");
+            }
             for (com.example.village.model.Quest quest : quests) {
-                player.sendMessage("§7  - " + quest.getTitle() + " §8(" + quest.getRewardVillagePoints() + " Punkte)");
+                player.sendMessage("§7  - " + quest.getTitle() + " §8(" + quest.getQuestId() + ", "
+                        + quest.getRewardVillagePoints() + " Punkte)");
+            }
+            return true;
+        }
+
+        if (args.length < 3) {
+            player.sendMessage(prefix + "§cNutzung: /villager quest " + action + " <QuestId> [VillagerName]");
+            return false;
+        }
+
+        String questId = args[2];
+
+        if ("accept".equals(action)) {
+            CustomVillager villager = resolveQuestVillager(player, args.length > 3 ? args[3] : null);
+            if (villager == null) {
+                player.sendMessage(prefix + "§cKein Villager gefunden. Interagiere zuerst mit einem Villager oder gib den Namen an.");
+                return false;
+            }
+            try {
+                questManager.assignQuestToPlayer(player, villager, questId);
+                var template = questManager.getQuestTemplate(questId);
+                MessageUtil.send(player, plugin.getConfigManager().getPrefix(),
+                        plugin.getConfigManager().text("messages.quest-accepted", "&aQuest angenommen: &e%title%")
+                                .replace("%title%", template != null ? template.getTitle() : questId));
+            } catch (QuestManager.QuestException e) {
+                MessageUtil.send(player, plugin.getConfigManager().getPrefix(), e.getMessage());
+            }
+            return true;
+        }
+
+        if ("complete".equals(action)) {
+            com.example.village.model.Quest quest = questManager.getActiveQuest(player.getUniqueId(), questId);
+            if (quest == null) {
+                player.sendMessage(prefix + "§cDiese Quest ist nicht aktiv.");
+                return false;
+            }
+            CustomVillager villager = null;
+            if (quest.getGiverVillagerId() != null) {
+                villager = advancedVillagerManager.getVillager(quest.getGiverVillagerId());
+            }
+            if (villager == null) {
+                villager = resolveQuestVillager(player, args.length > 3 ? args[3] : null);
+            }
+            if (villager == null) {
+                player.sendMessage(prefix + "§cQuestgeber-Villager nicht gefunden.");
+                return false;
+            }
+            Village village = villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
+            if (village == null && villager.getParentVillageId() != null) {
+                village = villageManager.getVillage(villager.getParentVillageId()).orElse(null);
+            }
+            if (village == null) {
+                player.sendMessage(prefix + "§cKein Dorf gefunden.");
+                return false;
+            }
+            try {
+                questManager.completeQuest(player, quest, villager, village);
+                MessageUtil.send(player, plugin.getConfigManager().getPrefix(),
+                        plugin.getConfigManager().text("messages.quest-completed", "&aQuest abgeschlossen: &e%title%")
+                                .replace("%title%", quest.getTitle()));
+            } catch (QuestManager.QuestException e) {
+                MessageUtil.send(player, plugin.getConfigManager().getPrefix(), e.getMessage());
             }
             return true;
         }
 
         player.sendMessage(prefix + "§cUnbekannte Quest-Aktion!");
         return false;
+    }
+
+    private CustomVillager resolveQuestVillager(Player player, String villagerName) {
+        Village village = villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
+        if (village == null) {
+            return null;
+        }
+        if (villagerName != null && !villagerName.isBlank()) {
+            return village.getVillagers().stream()
+                    .filter(v -> v.getName().equalsIgnoreCase(villagerName))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (plugin.getVillagerGuiClickListener() != null) {
+            UUID villagerId = plugin.getVillagerGuiClickListener().getLastInteractedVillager(player.getUniqueId());
+            if (villagerId != null) {
+                CustomVillager villager = advancedVillagerManager.getVillager(villagerId);
+                if (villager != null) {
+                    return villager;
+                }
+            }
+        }
+        return village.getVillagers().stream().findFirst().orElse(null);
     }
 
     private boolean handleSkillCmd(Player player, String[] args) {
@@ -252,10 +339,13 @@ public class VillagerCommand implements CommandExecutor, TabCompleter {
     private boolean showHelp(CommandSender sender) {
         sender.sendMessage("§b========== Villager Befehle ==========");
         sender.sendMessage("§e/villager recruit <Job> [Name] §7- Rekrutiert einen Villager");
+        sender.sendMessage("§7Jobs: " + String.join(", ", VillagerJob.selectableJobs().stream()
+                .map(job -> job.getProfessionKey().toUpperCase(java.util.Locale.ROOT))
+                .toList()));
         sender.sendMessage("§e/villager list §7- Listet Dorfbewohner auf");
         sender.sendMessage("§e/villager info <Name> §7- Info anzeigen");
         sender.sendMessage("§e/villager remove <Name> §7- Verjagt einen Villager");
-        sender.sendMessage("§e/villager quest <list> §7- Zeigt Quests");
+        sender.sendMessage("§e/villager quest <list|accept|complete> [QuestId] [VillagerName] §7- Quest-Verwaltung");
         sender.sendMessage("§e/villager skill <Name> <Skill> §7- Upgrade Skill");
         sender.sendMessage("§b======================================");
         return true;
@@ -268,7 +358,21 @@ public class VillagerCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2 && "recruit".equals(args[0])) {
-            return Arrays.asList("FARMER", "MERCHANT", "GUARD", "LIBRARIAN", "MILLER", "PRIEST", "LABORER");
+            return VillagerJob.selectableJobs().stream()
+                    .map(job -> job.getProfessionKey().toUpperCase(java.util.Locale.ROOT))
+                    .toList();
+        }
+
+        if (args.length == 2 && "quest".equals(args[0])) {
+            return Arrays.asList("list", "accept", "complete");
+        }
+
+        if (args.length == 3 && "quest".equals(args[0])) {
+            if ("accept".equals(args[1]) || "complete".equals(args[1])) {
+                return questManager.getQuestTemplates().stream()
+                        .map(q -> q.getQuestId())
+                        .toList();
+            }
         }
 
         return List.of();

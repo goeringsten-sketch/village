@@ -194,6 +194,10 @@ public final class LevelService {
         village.setPoints(village.getPoints() - required);
         village.setLevel(nextLevel);
 
+        // Highlight newly unlocked buildings/upgrades for all online members
+        com.example.village.gui.GuiManager gm = plugin.getGuiManager();
+        if (gm != null) gm.markNewlyUnlockedForVillage(village, nextLevel);
+
         notifyVillageMembers(village,
                 configManager.message("level-up")
                         .replace("%name%", village.getName())

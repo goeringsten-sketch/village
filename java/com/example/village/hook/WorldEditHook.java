@@ -1,5 +1,6 @@
 package com.example.village.hook;
 
+import com.example.village.service.SchematicMetaLoader;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -338,6 +339,42 @@ public final class WorldEditHook {
             if (block.getType() != sb.blockData().getMaterial()) {
                 return false;
             }
+        }
+        return true;
+    }
+
+    /**
+     * Hybrid-Validierung: STRUCTURE-Blöcke müssen exakt passen; DECORATION darf leer oder Whitelist sein.
+     */
+    public boolean validateHybridBuilding(World world, Location origin, SchematicData schematicData,
+                                          SchematicMetaLoader.SchematicMeta meta) {
+        for (SchematicBlock sb : schematicData.getBlocks()) {
+            SchematicMetaLoader.BlockRole role = meta.roleFor(sb.dx(), sb.dy(), sb.dz());
+            Block block = world.getBlockAt(
+                    origin.getBlockX() + sb.dx(),
+                    origin.getBlockY() + sb.dy(),
+                    origin.getBlockZ() + sb.dz()
+            );
+            Material expected = sb.blockData().getMaterial();
+            Material actual = block.getType();
+
+            if (role == SchematicMetaLoader.BlockRole.STRUCTURE) {
+                if (actual != expected) {
+                    return false;
+                }
+                continue;
+            }
+
+            if (actual == expected) {
+                continue;
+            }
+            if (actual.isAir()) {
+                continue;
+            }
+            if (!meta.decorationWhitelist().isEmpty() && meta.decorationWhitelist().contains(actual)) {
+                continue;
+            }
+            return false;
         }
         return true;
     }

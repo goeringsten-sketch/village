@@ -4,7 +4,7 @@ import com.example.village.VillagePlugin;
 import com.example.village.config.VillageConfigManager;
 import com.example.village.hook.CitizensHook;
 import com.example.village.model.BuildingDefinition;
-import com.example.village.model.BuildingType;
+
 import com.example.village.model.CustomVillager;
 import com.example.village.model.Village;
 import com.example.village.model.VillageBuilding;
@@ -12,13 +12,18 @@ import com.example.village.model.VillagerJob;
 import com.example.village.model.VillagerNeed;
 import com.example.village.model.VillagerProfession;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class VillagerService {
@@ -28,6 +33,8 @@ public final class VillagerService {
     private final VillageManager villageManager;
     private final CitizensHook citizensHook;
     private final VillagerScheduleManager scheduleManager;
+    private VillagerNutritionService nutritionService;
+    private VillagerContractService contractService;
     private int tickTaskId = -1;
 
     public VillagerService(VillagePlugin plugin, VillageConfigManager configManager,
@@ -39,9 +46,64 @@ public final class VillagerService {
         this.scheduleManager = new VillagerScheduleManager(this, citizensHook);
     }
 
+    public void setNutritionService(VillagerNutritionService nutritionService) {
+        this.nutritionService = nutritionService;
+        scheduleManager.setNutritionService(nutritionService);
+    }
+
+    public void setContractService(VillagerContractService contractService) {
+        this.contractService = contractService;
+    }
+
+    /**
+     * Converts all villagers of the given village back to plain vanilla villagers.
+     * Called when a village is being deleted. Removes:
+     * - Citizens NPCs (if Citizens is active)
+     * - Custom name and name visibility
+     * - Glowing status
+     * - The plugin's PersistentData marker key ("village-villager-id")
+     */
+    public void releaseVillagersOnDelete(Village village) {
+        if (village == null) return;
+        org.bukkit.NamespacedKey markerKey = new org.bukkit.NamespacedKey(plugin, "village-villager-id");
+
+        for (com.example.village.model.CustomVillager cv : new java.util.ArrayList<>(village.getVillagers())) {
+            // Citizens NPC: just remove the NPC
+            if (cv.getNpcId() >= 0 && citizensHook != null && citizensHook.isAvailable()) {
+                citizensHook.removeNpc(cv.getId());
+                continue;
+            }
+
+            // Vanilla villager: find the entity and strip all plugin-specific state
+            World world = village.getWorld();
+            if (world == null) continue;
+            for (org.bukkit.entity.Entity entity : world.getEntities()) {
+                if (!(entity instanceof org.bukkit.entity.Villager v)) continue;
+                String stored = v.getPersistentDataContainer().get(
+                        markerKey, org.bukkit.persistence.PersistentDataType.STRING);
+                if (!cv.getId().toString().equals(stored)) continue;
+
+                // Strip custom name
+                v.customName(null);
+                v.setCustomNameVisible(false);
+                // Remove glow
+                v.setGlowing(false);
+                // Remove plugin marker so it's no longer tracked
+                v.getPersistentDataContainer().remove(markerKey);
+                break;
+            }
+        }
+    }
+
     public void startVillagerTasks() {
-        // Run villager tick every 20 ticks (1 second)
-        tickTaskId = Bukkit.getScheduler().runTaskTimer(plugin, this::tickAllVillagers, 20L, 20L).getTaskId();
+        // Dorfweite Vertragsverarbeitung alle 20 Ticks (1 Sekunde)
+        tickTaskId = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            for (Village village : villageManager.getAllVillages()) {
+                if (contractService != null) {
+                    contractService.processVillage(village);
+                }
+            }
+        }, 20L, 20L).getTaskId();
     }
 
     public void stopVillagerTasks() {
@@ -51,17 +113,17 @@ public final class VillagerService {
         }
     }
 
-    private void tickAllVillagers() {
-        for (Village village : villageManager.getAllVillages()) {
-            for (CustomVillager villager : village.getVillagers()) {
-                tickVillager(village, villager);
-            }
-        }
+    /**
+     * Produktion und Tagesplan – wird vom VillagerTickService über die Warteschlange aufgerufen.
+     */
+    public void tickProductionAndSchedule(Village village, CustomVillager villager) {
+        tickVillager(village, villager);
     }
 
     private void tickVillager(Village village, CustomVillager villager) {
-        // Decay needs (1 second = 1/60 minute)
-        villager.decayNeeds(1.0 / 60.0);
+        if (nutritionService != null) {
+            nutritionService.ensureNutrientsInitialized(villager);
+        }
 
         // Check production
         VillagerProfession profession = configManager.getProfession(villager.getProfessionKey());
@@ -92,22 +154,58 @@ public final class VillagerService {
         }
     }
 
+    /**
+     * Effektives Produktionsintervall (in Sekunden) unter Beruecksichtigung des
+     * Dorf-Upgrades "production-speed". Wird vom Produktions-Menue zur Anzeige genutzt.
+     */
+    public double getEffectiveProductionIntervalSeconds(Village village, VillagerProfession profession) {
+        if (profession == null || village == null) return 0;
+        int speedLevel = village.getUpgradeLevel("production-speed");
+        double speedMultiplier = 1.0 + (speedLevel * configManager.getUpgradeSpeedMultiplierPerLevel());
+        return profession.getProductionIntervalSeconds() / speedMultiplier;
+    }
+
     private void produce(Village village, CustomVillager villager, VillagerProfession profession) {
-        // Check if villager's needs are critical - reduced production if unhappy/hungry
-        if (villager.isNeedCritical(VillagerNeed.HUNGER)) return;
+        if (villager.isProductionPaused()) {
+            return;
+        }
+        if (nutritionService != null && nutritionService.getProductionMultiplier(villager) <= 0) {
+            return;
+        }
+        if (nutritionService != null ? nutritionService.isHungerCritical(villager) : villager.isNeedCritical(VillagerNeed.HUNGER)) {
+            return;
+        }
 
         List<Material> produces = profession.getProduces();
         if (produces.isEmpty()) return;
 
-        // Level affects production amount
-        int amount = 1 + (villager.getLevel() / 3);
+        List<Material> targets;
+        if (villager.getPreferredProduct() != null && produces.contains(villager.getPreferredProduct())) {
+            targets = List.of(villager.getPreferredProduct());
+        } else {
+            targets = produces;
+        }
 
-        for (Material material : produces) {
+        double nutritionMod = nutritionService != null ? nutritionService.getProductionMultiplier(villager) : 1.0;
+        nutritionMod *= getAestheticProductionMultiplier(village, villager);
+        int amount = Math.max(1, (int) Math.round((1 + (villager.getLevel() / 3)) * nutritionMod));
+
+        boolean producedAny = false;
+        for (Material material : targets) {
+            if (!configManager.hasJobStorageCapacity(village, villager, material)) {
+                continue;
+            }
             villager.addItem(material, amount);
+            producedAny = true;
+        }
+        if (!producedAny) {
+            // Job-Lager voll: kein XP-Gewinn ohne tatsaechlichen Output.
+            return;
         }
 
         // Add XP
-        double xpGain = 1.0 + (villager.getLevel() * 0.5);
+        double xpGain = (1.0 + (villager.getLevel() * 0.5))
+                * (nutritionService != null ? nutritionService.getXpGainMultiplier(villager) : 1.0);
         villager.addXp(xpGain);
         checkVillagerLevelUp(villager);
     }
@@ -122,6 +220,22 @@ public final class VillagerService {
 
             villager.setXp(villager.getXp() - required);
             villager.setLevel(villager.getLevel() + 1);
+        }
+    }
+
+    private void initializeNutrientState(CustomVillager villager) {
+        if (nutritionService != null) {
+            nutritionService.ensureNutrientsInitialized(villager);
+            return;
+        }
+        ConfigurationSection nutrients = configManager.getVillagerNutrientsSection();
+        if (nutrients == null || nutrients.getKeys(false).isEmpty()) {
+            return;
+        }
+        int capacity = configManager.getVillagerNutrientStorageCapacity();
+        for (String nutrientKey : nutrients.getKeys(false)) {
+            villager.setNutrientCapacity(nutrientKey, capacity);
+            villager.setNutrientLevel(nutrientKey, capacity);
         }
     }
 
@@ -173,11 +287,6 @@ public final class VillagerService {
                     : null;
             if (def != null) {
                 beds += Math.max(0, def.getVillagerSlots());
-                continue;
-            }
-            BuildingType type = configManager.getBuildingType(building.getTypeKey());
-            if (type != null) {
-                beds += type.getEffectiveVillagerCapacity(building.getLevel());
             }
         }
         return beds;
@@ -202,8 +311,7 @@ public final class VillagerService {
                 ? plugin.getBuildingConfigLoader().getDefinition(building.getTypeKey())
                 : null;
         if (def != null) return Math.max(0, def.getVillagerSlots());
-        BuildingType type = configManager.getBuildingType(building.getTypeKey());
-        return type != null ? type.getEffectiveVillagerCapacity(building.getLevel()) : 0;
+        return 0;
     }
 
     /**
@@ -241,6 +349,7 @@ public final class VillagerService {
         String name = generateVillagerName();
         // Spawn as "none" - no profession assigned initially
         CustomVillager villager = new CustomVillager(id, name, VillagerJob.LABORER);
+        initializeNutrientState(villager);
         villager.setHomeLocation(location);
         villager.setWorkLocation(determineInitialWorkLocation(village, villager, location));
 
@@ -253,9 +362,6 @@ public final class VillagerService {
                     : null;
             if (def != null) {
                 capacity = Math.max(0, def.getVillagerSlots());
-            } else {
-                BuildingType type = configManager.getBuildingType(building.getTypeKey());
-                if (type != null) capacity = type.getEffectiveVillagerCapacity(building.getLevel());
             }
             if (capacity <= 0) continue;
             long assignedCount = village.getVillagers().stream()
@@ -385,6 +491,104 @@ public final class VillagerService {
      */
     public void spawnVanillaVillagerAt(CustomVillager customVillager, Location location) {
         spawnVanillaVillager(customVillager, location);
+    }
+
+    private Location determineReviveLocation(Village village, CustomVillager villager) {
+        if (villager != null && villager.getHomeLocation() != null && villager.getHomeLocation().getWorld() != null) {
+            return villager.getHomeLocation().clone();
+        }
+        if (village.getBellLocation() != null && village.getBellLocation().getWorld() != null) {
+            return village.getBellLocation().clone();
+        }
+        if (village.getLocation() != null && village.getLocation().getWorld() != null) {
+            return village.getLocation().clone();
+        }
+        return null;
+    }
+
+    public void spawnCustomVillager(CustomVillager customVillager, Location location) {
+        if (customVillager == null || location == null || location.getWorld() == null) {
+            return;
+        }
+        if (citizensHook.isAvailable()) {
+            int npcId = citizensHook.spawnNpc(customVillager, location);
+            if (npcId >= 0) {
+                customVillager.setNpcId(npcId);
+                return;
+            }
+        } else {
+            spawnVanillaVillagerAt(customVillager, location);
+            customVillager.setNpcId(-1);
+            return;
+        }
+
+        spawnVanillaVillagerAt(customVillager, location);
+        customVillager.setNpcId(-1);
+    }
+
+    public boolean isRevivalAvailable(Village village) {
+        return village != null && village.getLastDeadVillager() != null;
+    }
+
+    public long getRevivalCooldownMillis(Village village) {
+        if (village == null) return 0L;
+        long base = configManager.getVillagerRevivalBaseCooldownSeconds();
+        long increase = configManager.getVillagerRevivalCooldownIncreasePerUseSeconds();
+        long max = configManager.getVillagerRevivalMaxCooldownSeconds();
+        long seconds = base + Math.max(0, village.getReviveUses()) * increase;
+        if (max > 0) {
+            seconds = Math.min(seconds, max);
+        }
+        return Math.max(0L, seconds) * 1000L;
+    }
+
+    public double getRevivalCost(Village village) {
+        if (village == null) return 0.0;
+        double base = configManager.getVillagerRevivalBaseCost();
+        double increase = configManager.getVillagerRevivalCostIncreasePerUse();
+        double max = configManager.getVillagerRevivalMaxCost();
+        double cost = base + Math.max(0, village.getReviveUses()) * increase;
+        if (max > 0) {
+            cost = Math.min(cost, max);
+        }
+        return Math.max(0.0, cost);
+    }
+
+    public long getRevivalCooldownRemainingMillis(Village village) {
+        if (village == null) return 0L;
+        long last = village.getLastReviveAt();
+        if (last <= 0L) return 0L;
+        long cooldown = getRevivalCooldownMillis(village);
+        long elapsed = System.currentTimeMillis() - last;
+        return Math.max(0L, cooldown - elapsed);
+    }
+
+    public boolean canReviveNow(Village village) {
+        return getRevivalCooldownRemainingMillis(village) <= 0L;
+    }
+
+    public boolean reviveLastDeadVillager(Village village) {
+        if (village == null || village.getLastDeadVillager() == null) {
+            return false;
+        }
+
+        CustomVillager deadVillager = village.getLastDeadVillager();
+        Location reviveLocation = determineReviveLocation(village, deadVillager);
+        if (reviveLocation == null || reviveLocation.getWorld() == null) {
+            return false;
+        }
+
+        if (!village.getVillagers().contains(deadVillager)) {
+            village.addVillager(deadVillager);
+        }
+
+        deadVillager.setNpcId(-1);
+        spawnCustomVillager(deadVillager, reviveLocation);
+        village.setLastDeadVillager(null);
+        village.incrementReviveUses();
+        village.setLastReviveAt(System.currentTimeMillis());
+        villageManager.saveVillage(village);
+        return true;
     }
 
     /**
@@ -529,8 +733,72 @@ public final class VillagerService {
     }
 
     public void feedVillager(CustomVillager villager, double amount) {
+        if (nutritionService != null && !villager.getNutrientLevels().isEmpty()) {
+            for (String key : villager.getNutrientLevels().keySet()) {
+                villager.addNutrientLevel(key, amount / villager.getNutrientLevels().size());
+            }
+            return;
+        }
         villager.setNeedValue(VillagerNeed.HUNGER,
                 villager.getNeedValue(VillagerNeed.HUNGER) + amount);
+    }
+
+    public boolean feedVillager(Player player, CustomVillager villager, Material foodMaterial) {
+        if (foodMaterial == null || foodMaterial == Material.AIR) {
+            return false;
+        }
+        if (nutritionService != null) {
+            return nutritionService.feedWithMaterial(player, villager, foodMaterial);
+        }
+        Map<String, Map<String, Double>> recoveryMap = configManager.getVillagerFoodRecoveryByItem();
+        Map<String, Double> nutrientRecovery = recoveryMap.get(foodMaterial.name().toUpperCase(java.util.Locale.ROOT));
+        if (nutrientRecovery == null || nutrientRecovery.isEmpty()) {
+            return false;
+        }
+
+        boolean creative = player != null && player.getGameMode() == GameMode.CREATIVE;
+        if (!creative && player != null) {
+            if (!player.getInventory().contains(foodMaterial, 1)) {
+                return false;
+            }
+            player.getInventory().removeItem(new ItemStack(foodMaterial, 1));
+        }
+
+        double defaultCapacity = configManager.getVillagerNutrientStorageCapacity();
+        for (Map.Entry<String, Double> entry : nutrientRecovery.entrySet()) {
+            if ("hunger".equalsIgnoreCase(entry.getKey())) {
+                continue;
+            }
+            String nutrientKey = entry.getKey().toLowerCase(java.util.Locale.ROOT);
+            villager.setNutrientCapacity(nutrientKey, defaultCapacity);
+            villager.addNutrientLevel(nutrientKey, entry.getValue());
+        }
+        return true;
+    }
+
+    public boolean feedVillager(CustomVillager villager, Material foodMaterial) {
+        if (nutritionService != null) {
+            return nutritionService.feedFromInventory(villager, foodMaterial);
+        }
+        Map<String, Map<String, Double>> recoveryMap = configManager.getVillagerFoodRecoveryByItem();
+        Map<String, Double> nutrientRecovery = recoveryMap.get(foodMaterial.name().toUpperCase(java.util.Locale.ROOT));
+        if (nutrientRecovery == null || nutrientRecovery.isEmpty()) {
+            return false;
+        }
+        if (!villager.getInventory().containsKey(foodMaterial) || villager.getInventory().get(foodMaterial) <= 0) {
+            return false;
+        }
+        villager.removeItem(foodMaterial, 1);
+        double defaultCapacity = configManager.getVillagerNutrientStorageCapacity();
+        for (Map.Entry<String, Double> entry : nutrientRecovery.entrySet()) {
+            if ("hunger".equalsIgnoreCase(entry.getKey())) {
+                continue;
+            }
+            String nutrientKey = entry.getKey().toLowerCase(java.util.Locale.ROOT);
+            villager.setNutrientCapacity(nutrientKey, defaultCapacity);
+            villager.addNutrientLevel(nutrientKey, entry.getValue());
+        }
+        return true;
     }
 
     private String generateVillagerName() {
@@ -545,10 +813,10 @@ public final class VillagerService {
     // Utility methods
     private Location determineInitialWorkLocation(Village village, CustomVillager villager, Location spawnLocation) {
         if (village != null && villager != null && villager.getJob() != null) {
-            String workBuildingKey = villager.getJob().getWorkBuildingKey();
+            java.util.Set<String> preferredKeys = villager.getJob().getPreferredBuildingKeys();
             for (VillageBuilding building : village.getBuildings()) {
                 if (!building.isCompleted()) continue;
-                if (building.getTypeKey().equals(workBuildingKey)) {
+                if (preferredKeys.contains(building.getTypeKey())) {
                     return building.getLocation();
                 }
             }
@@ -565,13 +833,7 @@ public final class VillagerService {
     }
 
     private VillagerJob parseVillagerJob(String jobStr) {
-        if (jobStr == null) return VillagerJob.LABORER;
-        for (VillagerJob job : VillagerJob.values()) {
-            if (job.getWorkBuildingKey().equals(jobStr)) {
-                return job;
-            }
-        }
-        return VillagerJob.LABORER; // Default fallback
+        return VillagerJob.fromString(jobStr);
     }
 
     public VillageConfigManager getConfigManager() {
@@ -592,11 +854,6 @@ public final class VillagerService {
 
     public Location resolveActivityLocation(VillageBuilding building, String locationKey) {
         if (building == null || building.getLocation() == null) return null;
-        BuildingType legacy = configManager.getBuildingType(building.getTypeKey());
-        if (legacy != null) {
-            Location absolute = legacy.getAbsoluteLocation(locationKey, building.getLocation());
-            if (absolute != null) return absolute;
-        }
         return building.getLocation();
     }
 
@@ -613,6 +870,24 @@ public final class VillagerService {
             }
             villager.setVanillaEntityId(null);
         }
+    }
+
+    private double getAestheticProductionMultiplier(Village village, CustomVillager villager) {
+        if (villager.getAssignedJobBuildingId() == null || village == null) {
+            return 1.0;
+        }
+        VillageBuilding building = village.getBuildings().stream()
+                .filter(b -> b.getId().equals(villager.getAssignedJobBuildingId()))
+                .findFirst()
+                .orElse(null);
+        if (building == null || !building.hasAestheticScore()) {
+            return 1.0;
+        }
+        AestheticScoreService aestheticService = plugin.getAestheticScoreService();
+        if (aestheticService == null) {
+            return 1.0;
+        }
+        return aestheticService.getProductionMultiplier(building.getAestheticScore());
     }
 
     /**

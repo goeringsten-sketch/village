@@ -4,6 +4,7 @@ import com.example.village.config.CurrencyConfigManager;
 import com.example.village.model.Village;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
@@ -14,14 +15,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class CurrencyService {
     private final Plugin plugin;
     private final CurrencyConfigManager config;
+    private final com.example.village.hook.VaultHook vaultHook;
     private final Map<UUID, Map<String, Double>> balances = new ConcurrentHashMap<>();
     private final Set<UUID> joinBonusGranted = ConcurrentHashMap.newKeySet();
     private final File dataFile;
     private org.bukkit.configuration.file.FileConfiguration data;
 
-    public CurrencyService(Plugin plugin, CurrencyConfigManager config) {
+    public CurrencyService(Plugin plugin, CurrencyConfigManager config, com.example.village.hook.VaultHook vaultHook) {
         this.plugin = plugin;
         this.config = config;
+        this.vaultHook = vaultHook;
         this.dataFile = new File(plugin.getDataFolder(), "currency-balances.yml");
         load();
     }
@@ -39,16 +42,28 @@ public final class CurrencyService {
     }
 
     public synchronized double getBalance(UUID playerId, String currencyId) {
+        if (currencyId.equals(getGlobalCurrencyId()) && vaultHook.isAvailable()) {
+            return vaultHook.getBalance(Bukkit.getOfflinePlayer(playerId));
+        }
         return balances.getOrDefault(playerId, Collections.emptyMap()).getOrDefault(currencyId, 0.0);
     }
 
     public synchronized void addBalance(UUID playerId, String currencyId, double amount) {
         if (amount < 0) throw new IllegalArgumentException("Amount must be >= 0");
+        if (currencyId.equals(getGlobalCurrencyId()) && vaultHook.isAvailable()) {
+            vaultHook.deposit(Bukkit.getOfflinePlayer(playerId), amount);
+            return;
+        }
         balances.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>()).merge(currencyId, amount, Double::sum);
     }
 
     public synchronized boolean removeBalance(UUID playerId, String currencyId, double amount) {
         if (amount < 0) return false;
+        if (currencyId.equals(getGlobalCurrencyId()) && vaultHook.isAvailable()) {
+            OfflinePlayer off = Bukkit.getOfflinePlayer(playerId);
+            if (!vaultHook.has(off, amount)) return false;
+            return vaultHook.withdraw(off, amount);
+        }
         double current = getBalance(playerId, currencyId);
         if (current < amount) return false;
         balances.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>()).put(currencyId, current - amount);
@@ -57,6 +72,19 @@ public final class CurrencyService {
 
     public synchronized boolean transfer(UUID from, UUID to, String currencyId, double amount) {
         if (amount <= 0) return false;
+        if (currencyId.equals(getGlobalCurrencyId()) && vaultHook.isAvailable()) {
+            OfflinePlayer offFrom = Bukkit.getOfflinePlayer(from);
+            OfflinePlayer offTo = Bukkit.getOfflinePlayer(to);
+            if (!vaultHook.has(offFrom, amount)) return false;
+            if (vaultHook.withdraw(offFrom, amount)) {
+                if (vaultHook.deposit(offTo, amount)) {
+                    return true;
+                } else {
+                    vaultHook.deposit(offFrom, amount);
+                }
+            }
+            return false;
+        }
         if (!removeBalance(from, currencyId, amount)) return false;
         addBalance(to, currencyId, amount);
         return true;
@@ -77,11 +105,25 @@ public final class CurrencyService {
     }
 
     public synchronized void ensureJoinBonus(UUID playerId) {
+        if (vaultHook.isAvailable()) {
+            // Vault (z.B. Essentials) verwaltet das globale Startguthaben selbst
+            return;
+        }
         if (!joinBonusGranted.add(playerId)) return;
         addBalance(playerId, getGlobalCurrencyId(), config.getGlobalStartingAmount());
     }
 
     public synchronized Map<UUID, Double> getBalancesForCurrency(String currencyId) {
+        if (currencyId.equals(getGlobalCurrencyId()) && vaultHook.isAvailable()) {
+            Map<UUID, Double> out = new HashMap<>();
+            for (UUID id : balances.keySet()) {
+                out.put(id, vaultHook.getBalance(Bukkit.getOfflinePlayer(id)));
+            }
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                out.put(p.getUniqueId(), vaultHook.getBalance(p));
+            }
+            return out;
+        }
         Map<UUID, Double> out = new HashMap<>();
         for (Map.Entry<UUID, Map<String, Double>> e : balances.entrySet()) {
             double v = e.getValue().getOrDefault(currencyId, 0.0);

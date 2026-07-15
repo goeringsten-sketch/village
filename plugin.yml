@@ -1,0 +1,28 @@
+name: Village
+version: 1.0.0
+main: com.example.village.VillagePlugin
+api-version: '1.20'
+authors: [vraisunge]
+description: Umfangreiches Dorfsystem mit Gruendung, Gebieten, Leveln, Gebaeuden und Villagern
+softdepend: [Vault, WorldEdit, WorldGuard, Citizens, ProtocolLib, BlueMap]
+commands:
+  village:
+    description: Haupt-Dorf-Befehl
+    usage: /village
+    aliases: [dorf, v]
+  hunger:
+    description: Zeigt Nährwert-Scoreboard an/aus
+    usage: /hunger
+permissions:
+  village.admin:
+    default: op
+    description: Voller Admin-Zugriff auf alle Dorf-Befehle
+  village.create:
+    default: true
+    description: Erlaubt das Gruenden eines Dorfes
+  village.manage:
+    default: false
+    description: Erlaubt Dorfverwaltung (Upgrades, Gebaeude etc.)
+  village.bypass:
+    default: op
+    description: Umgeht alle Dorf-Einschraenkungen

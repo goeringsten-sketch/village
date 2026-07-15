@@ -1,6 +1,7 @@
 package com.example.village.gui;
 
 import com.example.village.util.ItemBuilder;
+import com.example.village.util.MessageUtil;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -26,7 +27,7 @@ public final class BuildingMenuGui implements InventoryHolder {
         this.isAdmin = player.hasPermission("village.admin");
 
         this.inventory = org.bukkit.Bukkit.createInventory(this, 27,
-                "§e§lBaumenü");
+                MessageUtil.text("ui.building-menu.title", "§e§lBaumenü"));
 
         setupItems(player);
     }
@@ -36,61 +37,66 @@ public final class BuildingMenuGui implements InventoryHolder {
         // Slot 0: Empty
         // Slot 1: Preview toggle
         inventory.setItem(1, new ItemBuilder(Material.GLASS)
-                .name("&b&lVorschau")
-                .lore("&7Zeige oder verstecke", "&7die Gebäude-Vorschau")
+                .name(MessageUtil.text("ui.building-menu.preview", "&b&lVorschau"))
+                .lore(MessageUtil.text("ui.building-menu.preview-lore-1", "&7Zeige oder verstecke"),
+                        MessageUtil.text("ui.building-menu.preview-lore-2", "&7die Gebäude-Vorschau"))
                 .build());
 
         // Slot 2: Empty
         // Slot 3: Info slot
         inventory.setItem(3, new ItemBuilder(Material.BOOK)
-                .name("&6&lBaumenü")
-                .lore("&7Wähle eine Option")
+                .name(MessageUtil.text("ui.building-menu.info", "&6&lBaumenü"))
+                .lore(MessageUtil.text("ui.building-menu.choose", "&7Wähle eine Option"))
                 .build());
 
         // Row 2: Actions
         // Slot 9: Pause/Resume
         if (isPaused) {
             inventory.setItem(9, new ItemBuilder(Material.GREEN_WOOL)
-                    .name("&a&lFortsetzen")
-                    .lore("&7Setze den Bau fort")
+                    .name(MessageUtil.text("ui.building-menu.resume", "&a&lFortsetzen"))
+                    .lore(MessageUtil.text("ui.building-menu.resume-lore", "&7Setze den Bau fort"))
                     .build());
         } else {
             inventory.setItem(9, new ItemBuilder(Material.YELLOW_WOOL)
-                    .name("&e&lUnterbrechen")
-                    .lore("&7Pausiere den Bau")
+                    .name(MessageUtil.text("ui.building-menu.pause", "&e&lUnterbrechen"))
+                    .lore(MessageUtil.text("ui.building-menu.pause-lore", "&7Pausiere den Bau"))
                     .build());
         }
 
         // Slot 11: Confirm
         inventory.setItem(11, new ItemBuilder(Material.GREEN_CONCRETE)
-                .name("&a&lFertigstellen")
-                .lore("&7Prüfe und vervollständige", "&7den Bau")
+                .name(MessageUtil.text("ui.building-menu.confirm", "&a&lFertigstellen"))
+                .lore(MessageUtil.text("ui.building-menu.confirm-lore-1", "&7Prüfe und vervollständige"),
+                        MessageUtil.text("ui.building-menu.confirm-lore-2", "&7den Bau"))
                 .build());
 
         // Slot 13: Villager assignment
         inventory.setItem(13, new ItemBuilder(Material.ARMOR_STAND)
-                .name("&c&lVillager zuweisen")
-                .lore("&7Weise diesen Bau", "&7einem Villager zu")
+                .name(MessageUtil.text("ui.building-menu.assign", "&c&lVillager zuweisen"))
+                .lore(MessageUtil.text("ui.building-menu.assign-lore-1", "&7Weise diesen Bau"),
+                        MessageUtil.text("ui.building-menu.assign-lore-2", "&7einem Villager zu"))
                 .build());
 
         // Slot 15: Cancel
         inventory.setItem(15, new ItemBuilder(Material.RED_CONCRETE)
-                .name("&c&lAbbrechen")
-                .lore("&7Bricht den Bau ab", "&7und entfernt das Gebäude")
+                .name(MessageUtil.text("ui.building-menu.cancel", "&c&lAbbrechen"))
+                .lore(MessageUtil.text("ui.building-menu.cancel-lore-1", "&7Bricht den Bau ab"),
+                        MessageUtil.text("ui.building-menu.cancel-lore-2", "&7und entfernt das Gebäude"))
                 .build());
 
         if (isAdmin) {
             inventory.setItem(17, new ItemBuilder(Material.COMMAND_BLOCK)
-                    .name("&c&lAdmin: Sofort fertigstellen")
-                    .lore("&7Setzt alle Vorschaubloecke direkt", "&7und markiert den Bau als fertig.")
+                    .name(MessageUtil.text("ui.building-menu.admin-complete", "&c&lAdmin: Sofort fertigstellen"))
+                    .lore(MessageUtil.text("ui.building-menu.admin-complete-lore-1", "&7Setzt alle Vorschaubloecke direkt"),
+                            MessageUtil.text("ui.building-menu.admin-complete-lore-2", "&7und markiert den Bau als fertig."))
                     .build());
         }
 
         // Row 3: Decorative items
         // Slot 26: Close button
         inventory.setItem(26, new ItemBuilder(Material.BARRIER)
-                .name("&7&lGUI schließen")
-                .lore("&7Drücke Q oder klicke hier")
+                .name(MessageUtil.text("ui.building-menu.close", "&7&lGUI schließen"))
+                .lore(MessageUtil.text("ui.building-menu.close-lore", "&7Drücke Q oder klicke hier"))
                 .build());
     }
 

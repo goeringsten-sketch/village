@@ -1,91 +1,204 @@
-# ============================================
-# Village Plugin - Currency Configuration
-# ============================================
+# ==============================================================================
+#  Village Plugin - Währungs- und Handelskonfiguration (currencies.yml)
+# ==============================================================================
+#  Definiert die globale Server-Währung (via Vault) sowie dorf-spezifische
+#  lokale Währungen, Wechselkurse und alle Handels-Regeln.
+#
+#  WICHTIG: Das Plugin benötigt Vault für die globale Währung. OpenEco oder
+#  ein kompatibles Economy-Plugin muss installiert sein.
+#
+#  Platzhalter in Template-Feldern:
+#    {VILLAGE_ID}   - Numerische ID des Dorfes (z.B. "42")
+#    {VILLAGE_NAME} - Name des Dorfes (z.B. "Sonnental")
+# ==============================================================================
 
-# Globale Server-Währung
+
+# ─────────────────────────────────────────────────────────────
+# GLOBALE SERVER-WÄHRUNG
+# ─────────────────────────────────────────────────────────────
+# Diese Währung gilt serverweit und wird über Vault abgewickelt.
+# Dorffremde Spieler nutzen diese Währung beim Handel im Dorf.
 global:
+  # Eindeutige ID der globalen Währung.
+  # Muss zu einer in OpenEco / Economy-Plugin registrierten Währung passen.
   id: "global"
+
+  # Singular-Anzeigename (z.B. "1 Goldmünze")
   name: "Goldmünze"
+
+  # Plural-Anzeigename (z.B. "100 Goldmünzen")
   namePlural: "Goldmünzen"
+
+  # Symbol für die Anzeige in GUIs und Chat (Unicode-Zeichen möglich)
   symbol: "⊕"
+
+  # Roh-Symbol/Präfix für Konsolenausgaben und Logs (ASCII-freundlich)
   rawSymbol: "[GP]"
-  
+
+  # Beschreibung für Tooltips und Info-Menüs
   description: "Server-weite Währung für Handel zwischen Dörfern"
-  
-  # Startwert für neue Spieler
+
+  # Startkapital neuer Spieler in dieser Währung
   startingAmount: 100
-  
-  # Konversions-Rate (Local → Global mit Verlust)
+
+  # Wechselstube: Konvertierung von lokaler Dorfwährung → globale Währung
   conversion:
+    # Ob die Konvertierung überhaupt erlaubt ist
     enabled: true
-    rate: 1.25  # 100 Local = 80 Global (20% Makler-Gebühr)
+
+    # Wechselkurs: Wie viele lokale Taler ergeben 1 globale Münze.
+    # Beispiel: rate: 1.25 → 125 Taler = 100 Goldmünzen (20% Gebühr)
+    # Beispiel: rate: 1.0  → 1:1 Kurs, keine Gebühr
+    # Beispiel: rate: 2.0  → 200 Taler = 100 Goldmünzen (50% Gebühr)
+    rate: 1.25
+
+    # Mindestbetrag für eine Konvertierung (verhindert Kleinstbeträge)
     minConversionAmount: 10
 
-# Dorf-spezifische Währungen
+
+# ─────────────────────────────────────────────────────────────
+# DORF-SPEZIFISCHE WÄHRUNGEN (Lokale Wirtschaft)
+# ─────────────────────────────────────────────────────────────
+# Jedes gegründete Dorf erhält automatisch eine eigene lokale Währung
+# basierend auf dieser Vorlage.
 villages:
-  # Default-Template für neue Dörfer
+  # Standard-Vorlage für neu gegründete Dörfer
   default:
-    # Muss zu einer existierenden OpenEco currency id passen (keine automatische Erstellung per API)
-    # Platzhalter: {VILLAGE_ID} (normalisierter Dorfname), {VILLAGE_NAME}
+    # Template für die Währungs-ID.
+    # Muss zu einer registrierten OpenEco-Währungs-ID passen.
+    # Verfügbare Platzhalter: {VILLAGE_ID}, {VILLAGE_NAME}
     idTemplate: "{VILLAGE_ID}"
+
+    # Template für den Währungsnamen (erscheint in GUIs und Chat)
     nameTemplate: "{VILLAGE_NAME}-Taler"
+
+    # Symbol der lokalen Währung (Unicode-Zeichen empfohlen)
     symbol: "Ɖ"
+
+    # Roh-Symbol für Konsolenausgaben
     rawSymbol: "[DT]"
-    
+
+    # Beschreibung für Tooltips (Platzhalter werden ersetzt)
     description: "Lokale Währung von {VILLAGE_NAME}"
-    
-    # Startwert wenn "Handel" Upgrade freigegeben wird
+
+    # Startguthaben für Spieler, wenn das "Handel"-Upgrade im Dorf aktiviert wird
     initialPlayersBalance: 100
+
+    # Startguthaben eines Dorfbewohner-NPCs bei der Rekrutierung
     initialVillagerBalance: 50
-    
-    # Wie viele Item-Slots hat Villager-Lagung?
+
+    # Anzahl Inventar-Slots für das Waren-Lager eines Dorfbewohners
+    # Standard-Inventargröße: 9, 18, 27, 36, 45 oder 54
     villagerStorageSlots: 27
-    
-    # Wer darf mit dieser Währung handeln?
+
+    # Liste der Berufs-Keys (aus villagers.yml), die am Handel teilnehmen dürfen.
+    # Berufe außerhalb dieser Liste können keine Waren kaufen/verkaufen.
+    # Mögliche Werte: Alle unter villagers.professions definierten Schlüssel
+    # (Kleinbuchstaben: farmer, merchant, blacksmith, scholar, cartographer,
+    #  baker, miner, lumberjack, carpenter, mason, beekeeper, brewer,
+    #  fisher, hunter, medic, courier, guard, ...)
     tradersJobs:
       - "FARMER"
+      - "MERCHANT"
       - "BLACKSMITH"
-      - "MILLER"
+      - "SCHOLAR"
+      - "CARTOGRAPHER"
       - "BAKER"
+      - "MINER"
+      - "LUMBERJACK"
+      - "CARPENTER"
+      - "MASON"
+      - "BEEKEEPER"
+      - "BREWER"
       - "FISHER"
       - "HUNTER"
-    
-    # Villager verdienen Währung durch Arbeit
+      - "MEDIC"
+      - "COURIER"
+      - "GUARD"
+
+    # Ob Dorfbewohner durch Produktion (Herstellung von Items) lokale Währung verdienen
     villagerProductionBonus: true
+
+    # Betrag in lokalen Talern, den ein Dorfbewohner pro produziertem Item erhält
     earnPerProductionItem: 5
 
 
-# Trading-Regeln
+# ─────────────────────────────────────────────────────────────
+# HANDELSREGELN & WIRTSCHAFTSEINSTELLUNGEN
+# ─────────────────────────────────────────────────────────────
 trading:
-  # Villager-to-Player
+
+  # ──────────────────────────────────────────
+  # HANDEL MIT DORFBEWOHNERN (NPC-Handel)
+  # ──────────────────────────────────────────
   villagerTrades:
+    # Ob der Handel mit Dorfbewohnern generell aktiv ist
     enabled: true
-    
+
+    # Handel mit der lokalen Dorfwährung (Taler)
     localCurrencyTrades:
+      # Ob lokale Taler für Transaktionen akzeptiert werden
       enabled: true
+      # Darf der Dorfbewohner Items von Spielern ankaufen?
       villagerCanBuy: true
+      # Darf der Dorfbewohner Items an Spieler verkaufen?
       villagerCanSell: true
-    
+
+    # Handel mit der globalen Server-Währung (Goldmünzen)
+    # Relevant für dorffremde Spieler ohne lokales Guthaben
     globalCurrencyTrades:
+      # Ob globale Goldmünzen für Transaktionen akzeptiert werden
       enabled: true
+      # Dürfen dorffremde Spieler Items von Dorfbewohnern kaufen?
       externalPlayersCanBuy: true
+      # Dürfen Dorfbewohner ihre Waren an dorffremde Spieler verkaufen?
       villagerCanSellToExternals: true
+      # Dürfen Dorfbewohner von dorffremden Spielern mit globaler Währung ankaufen?
+      # (false = Dorfbewohner nehmen nur lokale Taler von Fremden an)
       villagerCanBuyFromExternals: false
-  
-  # Player-to-Player
+
+  # ──────────────────────────────────────────
+  # SPIELER-ZU-SPIELER-HANDEL (P2P)
+  # ──────────────────────────────────────────
   playerTrades:
+    # Ob direkter Handel zwischen Spielern per Befehl/Interaktion erlaubt ist
     enabled: true
-    requestTimeout: 86400 # 24 hours in seconds
+
+    # Zeitlimit für offene Handelsanfragen in Sekunden.
+    # 86400 = 24 Stunden. Nach Ablauf verfällt die Anfrage automatisch.
+    requestTimeout: 86400
+
+    # Maximale Anzahl offener Handelsanfragen, die ein Spieler gleichzeitig senden darf
     maxPendingRequests: 10
+
+    # Maximaler Abstand in Blöcken zwischen zwei Spielern für einen Trade
     maxDistance: 8
+
+    # Ob Spieler untereinander direkt Währungen tauschen dürfen (Geldwechsel)
     allowCurrencyExchange: true
-  
-  # Marketplace
+
+  # ──────────────────────────────────────────
+  # MARKTPLATZ-SYSTEM
+  # ──────────────────────────────────────────
   marketplace:
+    # Ob das Marktplatz-System insgesamt aktiv ist
     enabled: true
+
+    # Dürfen Spieler eigene Verkaufsshops auf dem Marktplatz eröffnen?
     playerShopsEnabled: true
+
+    # Dürfen Dorfbewohner automatische Shops auf dem Marktplatz betreiben?
     villagerShopsEnabled: true
+
+    # Maximale Anzahl Verkaufsshops pro Spieler auf dem gesamten Marktplatz
     maxPlayerShops: 5
+
+    # Maximale Anzahl Shops, die von Dorfbewohnern insgesamt betrieben werden dürfen
     maxVillagerShops: 3
-    shopSetupCost: 25  # in GLOBAL currency
+
+    # Einrichtungskosten für einen neuen Shop (in GLOBALER Währung)
+    shopSetupCost: 25
+
+    # Verkaufsprovision in Prozent bei jedem erfolgreichen Marktplatzverkauf.
+    # 2.5 = 2.5% des Verkaufspreises werden als Gebühr abgezogen.
     commissionPercent: 2.5

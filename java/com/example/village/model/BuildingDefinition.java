@@ -20,7 +20,7 @@ public final class BuildingDefinition {
      *               registrierten Bereich vorhanden sind (required_blocks in der Config).
      *               Pfad-Gebäude (type: path) erzwingen immer BLOCK_CHECK via Walk-Session.
      */
-    public enum ValidationMode { SCHEMATIC, BLOCK_CHECK }
+    public enum ValidationMode { SCHEMATIC, BLOCK_CHECK, HYBRID }
 
     // ── Identität ─────────────────────────────────────────────────
     private final String id;
@@ -71,6 +71,8 @@ public final class BuildingDefinition {
     private final String upgradesTo;
     private final boolean showInMenu;
     private final boolean requiresSchematic;
+    /** Maximale Anzahl dieses Gebäude-Typs pro Dorf. -1 = unbegrenzt. */
+    private final int maxInstances;
 
     public BuildingDefinition(Builder b) {
         this.id                         = b.id;
@@ -105,6 +107,7 @@ public final class BuildingDefinition {
         this.upgradesTo                 = b.upgradesTo;
         this.showInMenu                 = b.showInMenu;
         this.requiresSchematic          = b.kind == BuildingKind.PATH ? false : b.requiresSchematic;
+        this.maxInstances               = b.maxInstances;
     }
 
     // ── Getters ───────────────────────────────────────────────────
@@ -122,8 +125,9 @@ public final class BuildingDefinition {
     public Map<Material, Integer> getRequiredBlocks()   { return requiredBlocks; }
     public int getRequiredBlockPercentage()             { return requiredBlockPercentage; }
     public Material getRequiredBlockForPercentage()     { return requiredBlockForPercentage; }
-    public boolean isSchematicBased()                   { return validationMode == ValidationMode.SCHEMATIC; }
+    public boolean isSchematicBased()                   { return validationMode == ValidationMode.SCHEMATIC || validationMode == ValidationMode.HYBRID; }
     public boolean isBlockCheckBased()                  { return validationMode == ValidationMode.BLOCK_CHECK; }
+    public boolean isHybridBased()                      { return validationMode == ValidationMode.HYBRID; }
     public List<Material> getPrimaryWorkstationBlocks() { return primaryWorkstationBlocks; }
     public List<WorkstationSlot> getAdditionalWorkstations() { return additionalWorkstations; }
     public AreaConfig getArea()                         { return area; }
@@ -144,6 +148,7 @@ public final class BuildingDefinition {
     public UpgradeTier getUpgradeTier(int tier)         { return upgrades.get(tier); }
     public boolean isShowInMenu()                       { return showInMenu; }
     public boolean isRequiresSchematic()                { return requiresSchematic; }
+    public int getMaxInstances()                        { return maxInstances; }
 
     @SuppressWarnings("unchecked")
     public <T> T getPassiveEffect(String key, T defaultValue) {
@@ -207,6 +212,25 @@ public final class BuildingDefinition {
         public Map<String, Object> getChanges()      { return changes; }
         public String getUpgradesTo()                { return upgradesTo; }
 
+        public Map<String, Object> getModularExtensions() {
+            Object raw = changes.get("modular_extensions");
+            if (raw instanceof org.bukkit.configuration.ConfigurationSection section) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                for (String key : section.getKeys(false)) {
+                    result.put(key, section.getConfigurationSection(key) != null
+                        ? section.getConfigurationSection(key)
+                        : section.get(key));
+                }
+                return Collections.unmodifiableMap(result);
+            }
+            if (raw instanceof Map<?, ?> map) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                map.forEach((k, v) -> result.put(String.valueOf(k), v));
+                return Collections.unmodifiableMap(result);
+            }
+            return Collections.emptyMap();
+        }
+
         @SuppressWarnings("unchecked")
         public <T> T getChange(String key, T def) {
             Object v = changes.get(key);
@@ -242,6 +266,7 @@ public final class BuildingDefinition {
         String upgradesTo = null;
         boolean showInMenu = true;
         boolean requiresSchematic = true;
+        int maxInstances = -1;
 
         public Builder id(String v)                        { id = v; return this; }
         public Builder categoryId(String v)                { categoryId = v; return this; }
@@ -274,6 +299,7 @@ public final class BuildingDefinition {
         public Builder upgradesTo(String v)                { upgradesTo = v; return this; }
         public Builder showInMenu(boolean v)               { showInMenu = v; return this; }
         public Builder requiresSchematic(boolean v)        { requiresSchematic = v; return this; }
+        public Builder maxInstances(int v)                 { maxInstances = v; return this; }
         public BuildingDefinition build()                  { return new BuildingDefinition(this); }
     }
 }

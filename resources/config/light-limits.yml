@@ -1,46 +1,93 @@
+# ==============================================================================
+#  Village Plugin - Licht-Limits-Konfiguration (light-limits.yml)
+# ==============================================================================
+#  Steuert das dynamische Licht-/Dunkelmodus-System. Spieler, die weit vom
+#  nächsten Dorf oder Lichtpunkt entfernt sind, erleben zunehmende Dunkelheit.
+#
+#  SYSTEMÜBERSICHT:
+#    - Spieler haben je nach Entfernung zur nächsten "Lichtquelle" ein max. Lichtlevel
+#    - "Lichtquellen" sind: Dorfgebiete, points-of-interest, worldguard-regions, paths
+#    - Das Lichtlevel wird über PacketEvents clientseitig simuliert (kein echter Block)
+#
+#  LICHTLEVEL-REFERENZ (Minecraft):
+#    15 = Taghell (Sonnenuntergang)    8 = Dämmerung / Kerze-Nähe
+#     0 = Vollständige Dunkelheit       1-3 = Kaum sichtbar
+# ==============================================================================
+
 config-version: 1
 
 light-control:
+  # Ob das Licht-Kontroll-System überhaupt aktiv ist
+  # Mögliche Werte: on | off | true | false
   enabled: on
 
-  # In diesen Welten ist der Dunkelmodus ueberhaupt aktiv.
-  # Leer = in allen Welten aktiv.
+  # Welten, in denen das System aktiv ist.
+  # Leer lassen (enabled-worlds: []) = aktiv in ALLEN Welten.
+  # Namen entsprechen dem Ordnernamen der Welt auf dem Server.
+  # Beispiele: world, world_nether, world_the_end, meinewelt
   enabled-worlds:
     - world
 
-  # Grundhelligkeit fuer Spieler ohne Dorf und fuer Bereiche ausserhalb
-  # aller Lichtquellen.
+  # Grundhelligkeit für Spieler ohne zugehöriges Dorf und für Bereiche
+  # außerhalb aller Lichtquellen und Dorfgebiete.
+  # 0 = vollständige Dunkelheit, 15 = maximale Helligkeit
   default-max-light-level: 0
 
-  # Wie oft die Distanzstufe der Spieler neu berechnet wird.
-  # Hoehere Werte sparen CPU, niedrigere reagieren schneller.
+  # Unter dieser Y-Ebene gilt der Spieler als im Untergrund/Mine.
+  # 2D-Lichtquellen (Dorfgebiet, Straßen etc.) werden hier ignoriert, so dass
+  # Minen standardmäßig dunkel (0) sind, es sei denn, es befindet sich ein POI dort.
+  # Deaktivieren mit -999.
+  underground-max-level: 40
+
+  # Wie oft (in Ticks) die Distanzstufe eines Spielers neu berechnet wird.
+  # Niedrig = reaktiver, aber mehr CPU-Last.
+  # Hoch = weniger CPU-Last, aber träger Übergang bei Bewegung.
+  # 20 Ticks = 1 Sekunde. Empfohlen: 10–40 Ticks.
   update-interval-ticks: 20
 
-  # Form der Stufenradien für Lichtquellen.
-  # square = aktuelle Würfel-/Quadratlogik
-  # circle = kreisförmige bzw. sphärische Abstände
+  # Form der Stufenradien für Lichtquellen (beeinflusst alle stages-Distanzen).
+  # Mögliche Werte:
+  #   square  - Quadratische/würfelförmige Prüfung (Chebyshev-Distanz, performanter)
+  #   circle  - Kreisförmige/sphärische Prüfung (euklidische Distanz, realistischer)
   stage-shape: square
 
-  # Wie viele geladene Chunks um den Spieler bei einer Stufen-Aenderung
-  # oder beim Zuruecksetzen neu mit Light-Updates versorgt werden.
+  # Anzahl geladener Chunks um den Spieler herum, die bei einem normalen
+  # Stufen-Tick neu mit Light-Updates versorgt werden.
+  # Höhere Werte = gleichmäßigerer Übergang, aber mehr Netzwerklast.
   refresh-radius-chunks: 1
 
-  # Bei einem echten Helligkeitsstufen-Wechsel wird ein groesserer Bereich
-  # nachgezogen, damit keine alten hellen Chunk-Inseln sichtbar bleiben.
+  # Bei einem echten Helligkeitsstufen-Wechsel wird ein größerer Bereich
+  # nachgezogen, um helle "Rest-Chunk-Inseln" der alten Stufe zu beseitigen.
+  # Empfehlung: 3–7 (je nach Render-Distanz der Spieler)
   stage-change-refresh-radius-chunks: 5
 
-  # Wie viele Chunks pro Tick aktiv nachgesendet werden duerfen.
-  # Kleinere Werte sind sanfter fuer den Client, groessere synchronisieren schneller.
-  refresh-batch-size-chunks: 8
+  # Wie viele Chunks pro Tick aktiv mit Light-Updates gesendet werden dürfen.
+  # Kleinere Werte = sanfter für den Client (empfohlen bei vielen Spielern)
+  # Größere Werte = schnellere Synchronisation
+  refresh-batch-size-chunks: 4
 
-  # Wenn der Spieler in einen neuen Chunk laeuft, werden bereits geladene
-  # Chunks in diesem kleinen Radius noch einmal auf die aktuelle Stufe
-  # angeglichen. Das verhindert helle Restgebiete aus der vorherigen Stufe.
+  # Wenn der Spieler in einen neuen Chunk läuft, werden bereits geladene
+  # Chunks in diesem Radius erneut auf die aktuelle Lichtstufe abgeglichen.
+  # Verhindert helle Restgebiete aus der vorherigen Stufe beim Laufen.
   chunk-move-refresh-radius-chunks: 2
 
-  # Distanz in Bloecken AUSSERHALB der Baugrenze und das dazugehoerige
-  # maximale Lichtlevel. Es gilt immer der letzte Eintrag, dessen Distanz
-  # kleiner oder gleich der aktuellen Distanz ist.
+
+  # ─────────────────────────────────────────────────────────
+  # DISTANZSTUFEN (Hauptsystem)
+  # ─────────────────────────────────────────────────────────
+  # Definiert die Helligkeit außerhalb der Dorfgrenzen in Abhängigkeit
+  # von der Distanz zur nächsten Baugrenze.
+  #
+  # Format:
+  #   - distance: <Distanz in Blöcken ab der Baugrenze>
+  #     max-light-level: <0–15>
+  #
+  # Regeln:
+  #   - Es gilt immer der letzte Eintrag, dessen Distanz ≤ der aktuellen Distanz ist.
+  #   - Einträge müssen aufsteigend nach 'distance' sortiert sein.
+  #   - Distanz 0 = direkt an der Baugrenze (innen = immer 15)
+  #   - Letzter Eintrag sollte eine sehr hohe Distanz haben (z.B. 1000) um
+  #     das Verhalten weit außerhalb zu definieren.
   stages:
     - distance: 0
       max-light-level: 15
@@ -71,20 +118,38 @@ light-control:
     - distance: 1000
       max-light-level: 0
 
-  # Feste Lichtpunkte. Jeder Eintrag ist eine eigene Lichtquelle.
-  # radius nutzt die globale stage-shape-Option (square oder circle).
-  # Wenn y weggelassen wird, bleibt die Auswertung planar (2D) auf X/Z-Ebene.
-  # Optional kann pro Punktquelle ein eigenes stages-Set definiert werden.
-  # base-radius bleibt kompatibel zu älteren Konfigurationen.
+
+  # ─────────────────────────────────────────────────────────
+  # FESTE LICHTPUNKTE (Points of Interest)
+  # ─────────────────────────────────────────────────────────
+  # Definierte Koordinatenbereiche, die als Lichtquelle fungieren.
+  # Nützlich für: Spawn, Händlerstädte, Lager, besondere Orte.
+  #
+  # Jeder Eintrag ist ein benanntes Objekt (Name frei wählbar, z.B. "spawn").
+  # Pflichtfelder:  world, x, z, radius (oder stages)
+  # Optionale Felder:
+  #   y             - Wenn angegeben: 3D-sphärische Distanzprüfung; sonst 2D (X/Z-Ebene)
+  #   min/max       - Begrenzungsbox als Alternative zu radius
+  #   radius        - Radius in Blöcken um den Mittelpunkt (nutzt globale stage-shape)
+  #   stages        - Eigenes Stufen-Set (überschreibt die globalen 'stages' für diesen Punkt)
+  #
+  # Beispiel für einen einfachen Punkt ohne eigene stages:
+  #   markt:
+  #     world: world
+  #     x: 500
+  #     z: 200
+  #     radius: 50
   points-of-interest:
     spawn:
+      # Optionale Begrenzungsbox (alternative zu radius für rechteckige Bereiche)
       min: {x: 2078, y: 23, z: 44}
       max: {x: 2283, y: 173, z: 253}
       world: world
-      x: 2170
-      y: 100
-      z: 150
-      radius: 100
+      x: 2170      # Mittelpunkt X
+      y: 100       # Mittelpunkt Y (aktiviert 3D-Distanzprüfung)
+      z: 150       # Mittelpunkt Z
+      radius: 100  # Radius in Blöcken (Leerzeichen um den Mittelpunkt)
+      # Eigene Distanzstufen für diesen Punkt (überschreibt globale stages)
       stages:
         - distance: 0
           max-light-level: 15
@@ -93,16 +158,31 @@ light-control:
         - distance: 32
           max-light-level: 0
 
-  # WorldGuard-Regionen als Lichtquellen. Innerhalb der Region gilt die hellste Stufe,
-  # ausserhalb greifen die definierten Distanzstufen ab der Regionsgrenze.
+
+  # ─────────────────────────────────────────────────────────
+  # WORLDGUARD-REGIONEN ALS LICHTQUELLEN
+  # ─────────────────────────────────────────────────────────
+  # Innerhalb einer WorldGuard-Region herrscht maximale Helligkeit (15).
+  # Außerhalb der Region greifen die definierten Distanzstufen ab der Regionsgrenze.
+  #
+  # Benötigte Felder: world, region-id, base-radius
+  # base-radius = Distanz in Blöcken ab der Regionsgrenze, bis zur Verdunkelung
   worldguard-regions:
     gianttree:
       world: world
-      region-id: gianttree
-      base-radius: 100
+      region-id: gianttree  # Exakter Name der WorldGuard-Region
+      base-radius: 100      # Heller Übergangsbereich außerhalb der Region
 
-  # Helle Pfade entlang einer Linie. radius definiert die helle Korridorbreite
-  # um die Linie; ausserhalb greifen die Distanzstufen.
+
+  # ─────────────────────────────────────────────────────────
+  # HELLE PFADE (Lichtkorridore entlang einer Linie)
+  # ─────────────────────────────────────────────────────────
+  # Erstellt einen beleuchteten Korridor entlang einer Linie (z.B. Straße).
+  # Nützlich für: Handelsrouten, Straßen zwischen Dörfern, Zugverbindungen.
+  #
+  # Benötigte Felder: world, from (x, z), to (x, z), radius
+  # radius = Breite des hellen Korridors um die Linie (in Blöcken)
+  # Außerhalb des Korridors greifen die globalen 'stages'.
   paths:
     village-road:
       world: world
@@ -112,4 +192,4 @@ light-control:
       to:
         x: 47
         z: 84
-      radius: 5
+      radius: 5  # Breite des hellen Bereichs links/rechts der Linie

@@ -13,8 +13,16 @@ public final class UpgradeType {
     private final double localCostPerLevel;
     private final int pointsPerLevel;
 
+    private final int requiredVillageLevel;
+
     public UpgradeType(String key, String displayName, String description,
                        Material icon, int maxLevel, double globalCostPerLevel, double localCostPerLevel, int pointsPerLevel) {
+        this(key, displayName, description, icon, maxLevel, globalCostPerLevel, localCostPerLevel, pointsPerLevel, 1);
+    }
+
+    public UpgradeType(String key, String displayName, String description,
+                       Material icon, int maxLevel, double globalCostPerLevel, double localCostPerLevel, int pointsPerLevel,
+                       int requiredVillageLevel) {
         this.key = key;
         this.displayName = displayName;
         this.description = description;
@@ -23,6 +31,7 @@ public final class UpgradeType {
         this.globalCostPerLevel = globalCostPerLevel;
         this.localCostPerLevel = localCostPerLevel;
         this.pointsPerLevel = pointsPerLevel;
+        this.requiredVillageLevel = Math.max(1, requiredVillageLevel);
     }
 
     public String getKey() { return key; }
@@ -34,4 +43,5 @@ public final class UpgradeType {
     public double getGlobalCostPerLevel() { return globalCostPerLevel; }
     public double getLocalCostPerLevel() { return localCostPerLevel; }
     public int getPointsPerLevel() { return pointsPerLevel; }
+    public int getRequiredVillageLevel() { return requiredVillageLevel; }
 }

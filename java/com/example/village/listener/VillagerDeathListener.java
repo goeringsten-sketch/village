@@ -5,6 +5,11 @@ import com.example.village.hook.CitizensHook;
 import com.example.village.model.CustomVillager;
 import com.example.village.model.Village;
 import com.example.village.service.VillageManager;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.ComponentBuilder;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
@@ -60,6 +65,22 @@ public final class VillagerDeathListener implements Listener {
         }
 
         plugin.getLogger().info("Dorfbewohner " + villager.getName() + " ist gestorben.");
+
+        String prefix = plugin.getConfig().getString("prefix", "§6[Dorf] ");
+        TextComponent revive = new TextComponent("§a[WIEDERBELEBEN]");
+        revive.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/village revive"));
+        revive.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                new ComponentBuilder("Klicke, um den letzten Dorfbewohner wiederzubeleben.").create()));
+
+        for (UUID memberId : village.getMembers().keySet()) {
+            org.bukkit.entity.Player member = Bukkit.getPlayer(memberId);
+            if (member == null || !member.isOnline()) continue;
+            member.spigot().sendMessage(
+                    new TextComponent(prefix + " "),
+                    new TextComponent("§cDorfbewohner §e" + villager.getName() + " §cist gestorben. "),
+                    revive
+            );
+        }
     }
 
     private UUID getVillagerIdFromEntity(LivingEntity entity) {

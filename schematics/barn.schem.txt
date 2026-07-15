@@ -1,0 +1,3 @@
+# Standard-Schematic: Scheune
+# Erstelle diese Datei mit WorldEdit: //schem save barn.schem
+# Ersetze diese Platzhalter-Datei mit der echten .schem Datei

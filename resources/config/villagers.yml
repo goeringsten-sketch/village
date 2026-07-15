@@ -1,21 +1,85 @@
-# Villager settings split from config.yml
+# ==============================================================================
+#  Village Plugin - Dorfbewohner-Konfiguration (villagers.yml)
+# ==============================================================================
+#  Konfiguriert Berufe, Tagesabläufe, Nährstoffversorgung, Hunger,
+#  Wiederbelebung, Job-Lager und den Skill-Baum der Dorfbewohner.
+#
+#  ALLGEMEINE HINWEISE:
+#  - Material-Namen: Bukkit-Enum (GROSSBUCHSTABEN mit Unterstrichen)
+#    → https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
+#  - Zeitangaben in Ticks: 20 Ticks = 1 Sekunde, 1200 Ticks = 1 Minute
+#  - Alle Dezimalwerte mit Punkt (z.B. 1.0, nicht 1,0)
+# ==============================================================================
 
 villagers:
+  # Basis-Maximum an Dorfbewohnern auf Stufe 1 (ohne Upgrades)
   base-max: 5
-  # Moegliche Activity-Typen fuer activity-sequence:
-  # TRAVEL_TO, WORK, PREPARE, GATHER, SLEEP, IDLE, TRADE
-  # location-key verweist auf buildings.yml -> buildings.types.<type>.locations.<key>
-  # Beispiel-Farm: workstation, workstation_compost, workstation_mill, storage
-  # Berufe
+
+
+  # ============================================================================
+  #  BERUFE (Professions)
+  # ============================================================================
+  # Jeder Beruf steuert: Produkte, Produktionsintervall, benötigtes Dorflevel
+  # und den täglichen Aktivitätsablauf (activity-sequence).
+  #
+  # ALLGEMEINE BERUFS-FELDER:
+  #   display-name: "<Farbcode+Name>"  - Anzeigename im GUI (&a = grün, etc.)
+  #   icon: <Material>                 - Icon im Berufs-Menü
+  #   produces: [<Material>, ...]      - Items, die dieser Beruf produziert
+  #                                      (Bukkit-Material-Namen als Liste)
+  #                                      Leer ([]) = kein Produktionsoutput
+  #   production-interval-seconds: <Z> - Sekunden zwischen zwei produzierten Items
+  #                                      0 = kein automatisches Produzieren
+  #   required-level: <Zahl>           - Mindest-Dorflevel zum Zuweisen dieses Berufs
+  #   skin-name: "<Name>"              - Custom NPC Skin (muss auf dem Server verfügbar sein)
+  #
+  # ────────────────────────────────────────────────────────────────────────────
+  # AKTIVITÄTS-SEQUENZ (activity-sequence)
+  # ────────────────────────────────────────────────────────────────────────────
+  # Definiert den Tagesablauf des Dorfbewohners als geordnete Liste von Phasen.
+  # Jede Phase hat einen eindeutigen Schlüssel (frei wählbar) und folgende Felder:
+  #
+  #   type: <Aktivitäts-Typ>       - Was der NPC tut. Mögliche Werte:
+  #       TRAVEL_TO    - Bewegt sich zu einer Position (location-key)
+  #       WORK         - Führt Arbeitsaufgaben aus (generiert Produkte)
+  #       PREPARE      - Vorbereitungsphase (holt Werkzeuge/Zutaten)
+  #       GATHER       - Rohstoffe sammeln (Fischen, Jagen, Ernten)
+  #       SLEEP        - Schläft (geht zum Bett, regeneriert Energie)
+  #       IDLE         - Freizeit / Pause (kein besonderes Verhalten)
+  #       TRADE        - Steht für Spieler-Handel bereit
+  #       GET_FOOD     - Sucht Nahrung aus einer Truhe
+  #       EAT_FOOD     - Verzehrt die gefundene Nahrung
+  #
+  #   location-key: "<Schlüssel>"  - Verweist auf Arbeitsplatz in buildings.yml
+  #                                  Bekannte Keys: "workstation", "storage", ""
+  #                                  Leer ("") = keine feste Position nötig
+  #
+  #   duration-ticks: <Zahl>       - Dauer dieser Phase in Ticks (20 Ticks = 1s)
+  #
+  #   interruptable: true | false  - Ob die Phase durch Angriffe/Events unterbrochen werden kann
+  #
+  #   delay-ticks: <Zahl>          - (optional) Wartezeit vor Phasenstart in Ticks
+  #
+  #   required-village-level: <Z>  - (optional) Dorflevel, ab dem diese Phase aktiv ist
+  #
+  #   actions: [<Aktion>, ...]     - (optional) Zusätzliche Aktionen während IDLE:
+  #       "get-food"  - NPC holt Essen
+  #       "eat-food"  - NPC isst das Essen
+  #
+  #   description: "<Text>"        - Beschreibung für Debug-Logs und GUI
+  # ============================================================================
   professions:
+
+    # ── FARMER (Bauer) ──────────────────────────────────────────────────────
     farmer:
       display-name: "&aBauer"
       icon: WHEAT_SEEDS
+      # Produzierte Items (Bukkit-Material-Enum, großgeschrieben)
       produces:
         - WHEAT
         - CARROT
         - POTATO
-      production-interval-seconds: 300
+      production-interval-seconds: 300  # Alle 5 Minuten ein neues Item
       required-level: 1
       skin-name: "farmer"
       activity-sequence:
@@ -35,8 +99,13 @@ villagers:
           type: "IDLE"
           location-key: ""
           duration-ticks: 600
+          delay-ticks: 40
           interruptable: true
-          description: "Mittagspause"
+          required-village-level: 1
+          actions:
+            - "get-food"
+            - "eat-food"
+          description: "Mittagspause: Essen holen und essen"
         work-afternoon:
           type: "WORK"
           location-key: "workstation"
@@ -49,6 +118,8 @@ villagers:
           duration-ticks: 200
           interruptable: true
           description: "Geht schlafen"
+
+    # ── MINER (Bergarbeiter) ─────────────────────────────────────────────────
     miner:
       display-name: "&aBergarbeiter"
       icon: IRON_PICKAXE
@@ -56,7 +127,7 @@ villagers:
         - COBBLESTONE
         - IRON_ORE
         - COAL
-      production-interval-seconds: 600
+      production-interval-seconds: 600  # Alle 10 Minuten
       required-level: 3
       skin-name: "miner"
       activity-sequence:
@@ -78,6 +149,8 @@ villagers:
           duration-ticks: 400
           interruptable: true
           description: "Kurze Pause"
+
+    # ── LUMBERJACK (Holzfäller) ──────────────────────────────────────────────
     lumberjack:
       display-name: "&aHolzfaeller"
       icon: IRON_AXE
@@ -107,32 +180,409 @@ villagers:
           duration-ticks: 300
           interruptable: true
           description: "Bringt Holz zurueck"
+
+    # ── BLACKSMITH (Schmied) ─────────────────────────────────────────────────
     blacksmith:
       display-name: "&aSchmied"
       icon: ANVIL
       produces:
         - IRON_INGOT
         - GOLD_INGOT
-      production-interval-seconds: 900
+      production-interval-seconds: 900  # Alle 15 Minuten
       required-level: 5
+      skin-name: "blacksmith"
+      activity-sequence:
+        prepare:
+          type: "PREPARE"
+          location-key: "storage"
+          duration-ticks: 200
+          interruptable: true
+          description: "Bereitet Werkzeuge vor"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 2400
+          interruptable: false
+          description: "Schmiedet am Amboss"
+        lunch:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 600
+          delay-ticks: 40
+          interruptable: true
+          actions:
+            - "get-food"
+            - "eat-food"
+          description: "Mittagspause"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Kurze Pause"
+
+    # ── GUARD (Wache) ────────────────────────────────────────────────────────
     guard:
       display-name: "&aWache"
       icon: IRON_SWORD
-      produces: []
+      produces: []          # Wachen produzieren keine Items
       production-interval-seconds: 0
       required-level: 4
+      skin-name: "guard"
+      activity-sequence:
+        patrol:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 400
+          interruptable: true
+          description: "Patrouilliert"
+        watch:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Steht Wache"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── MERCHANT (Händler) ───────────────────────────────────────────────────
     merchant:
       display-name: "&aHaendler"
       icon: EMERALD
       produces: []
       production-interval-seconds: 0
       required-level: 6
+      skin-name: "merchant"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 300
+          interruptable: true
+          description: "Geht zum Marktstand"
+        trade:
+          type: "TRADE"     # Aktiviert Handelsinteraktion mit Spielern
+          location-key: "workstation"
+          duration-ticks: 2000
+          interruptable: true
+          description: "Handelt"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── SCHOLAR (Gelehrter) ──────────────────────────────────────────────────
     scholar:
       display-name: "&aGelehrter"
       icon: BOOK
       produces: []
       production-interval-seconds: 0
       required-level: 8
+      skin-name: "scholar"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 200
+          interruptable: true
+          description: "Geht zur Bibliothek"
+        study:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 2400
+          interruptable: false
+          description: "Studiert"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 600
+          interruptable: true
+          description: "Pause"
+
+    # ── CARPENTER (Tischler) ─────────────────────────────────────────────────
+    carpenter:
+      display-name: "&aTischler"
+      icon: CRAFTING_TABLE
+      # Verarbeitet Rohholz (vom Holzfäller) zu Planken, Treppen und Stielen
+      produces:
+        - OAK_PLANKS
+        - OAK_STAIRS
+        - STICK
+      production-interval-seconds: 350
+      required-level: 2
+      skin-name: "carpenter"
+      activity-sequence:
+        prepare:
+          type: "PREPARE"
+          location-key: "storage"
+          duration-ticks: 200
+          interruptable: true
+          description: "Holt Material"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Verarbeitet Holz"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── MASON (Steinmetz) ────────────────────────────────────────────────────
+    mason:
+      display-name: "&aSteinmetz"
+      icon: STONECUTTER
+      # Verarbeitet Rohstein zu Ziegeln und Dekoration
+      produces:
+        - STONE_BRICKS
+        - BRICKS
+        - CHISELED_STONE_BRICKS
+      production-interval-seconds: 400
+      required-level: 3
+      skin-name: "mason"
+      activity-sequence:
+        prepare:
+          type: "PREPARE"
+          location-key: "storage"
+          duration-ticks: 200
+          interruptable: true
+          description: "Bereitet Stein vor"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 2000
+          interruptable: false
+          description: "Bearbeitet Stein"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── BEEKEEPER (Imker) ────────────────────────────────────────────────────
+    beekeeper:
+      display-name: "&aImker"
+      icon: HONEYCOMB
+      # Liefert Honigwaben und Honig (Bonuseffekte via Nutrition-System)
+      produces:
+        - HONEYCOMB
+        - HONEY_BOTTLE
+      production-interval-seconds: 500
+      required-level: 3
+      skin-name: "beekeeper"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 300
+          interruptable: true
+          description: "Geht zu den Bienenstöcken"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1600
+          interruptable: false
+          description: "Sammelt Honig"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── BREWER (Brauer) ──────────────────────────────────────────────────────
+    brewer:
+      display-name: "&aBrauer"
+      icon: BREWING_STAND
+      # Stellt Zutaten und Festtagswaren her
+      produces:
+        - GLASS_BOTTLE
+        - SUGAR
+        - PUMPKIN_PIE
+      production-interval-seconds: 480
+      required-level: 4
+      skin-name: "brewer"
+      activity-sequence:
+        prepare:
+          type: "PREPARE"
+          location-key: "storage"
+          duration-ticks: 200
+          interruptable: true
+          description: "Holt Zutaten"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Braut"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── FISHER (Fischer) ─────────────────────────────────────────────────────
+    fisher:
+      display-name: "&aFischer"
+      icon: FISHING_ROD
+      # Sammelt Fisch und Seetang
+      produces:
+        - COD
+        - SALMON
+        - KELP
+      production-interval-seconds: 350
+      required-level: 2
+      skin-name: "fisher"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 300
+          interruptable: true
+          description: "Geht zum Wasser"
+        gather:
+          type: "GATHER"    # Sammeln-Typ: NPC fischt/erntet aktiv
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Fischt"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── HUNTER (Jäger) ──────────────────────────────────────────────────────
+    hunter:
+      display-name: "&aJäger"
+      icon: BOW
+      # Jagdbeute und Pfeile
+      produces:
+        - LEATHER
+        - ARROW
+        - RABBIT_HIDE
+      production-interval-seconds: 380
+      required-level: 3
+      skin-name: "hunter"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 400
+          interruptable: true
+          description: "Geht auf die Jagd"
+        gather:
+          type: "GATHER"
+          location-key: "workstation"
+          duration-ticks: 1600
+          interruptable: false
+          description: "Jagt"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── MEDIC (Medikus) ──────────────────────────────────────────────────────
+    medic:
+      display-name: "&aMedikus"
+      icon: GOLDEN_APPLE
+      produces: []          # Kein Produktionsoutput – heilt stattdessen NPCs
+      production-interval-seconds: 0
+      required-level: 4
+      skin-name: "medic"
+      # Ermöglicht dem Medikus das Wiederbeleben von verstorbenen Bürgern
+      permission: "village.revival.use"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 200
+          interruptable: true
+          description: "Geht zur Praxis"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 2000
+          interruptable: false
+          description: "Behandelt Patienten"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+    # ── COURIER (Kurier) ─────────────────────────────────────────────────────
+    courier:
+      display-name: "&aKurier"
+      icon: HOPPER
+      produces: []          # Liefert Waren zwischen Gebäuden, produziert nichts
+      production-interval-seconds: 0
+      required-level: 2
+      skin-name: "courier"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 400
+          interruptable: true
+          description: "Holt Sendungen ab"
+        deliver:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1600
+          interruptable: false
+          description: "Liefert aus"
+        return:
+          type: "TRAVEL_TO"
+          location-key: "storage"
+          duration-ticks: 400
+          interruptable: true
+          description: "Kehrt zurück"
+
+    # ── CARTOGRAPHER (Kartograph) ────────────────────────────────────────────
+    cartographer:
+      display-name: "&aKartograph"
+      icon: CARTOGRAPHY_TABLE
+      produces: []
+      production-interval-seconds: 0
+      required-level: 3
+      skin-name: "cartographer"
+      activity-sequence:
+        travel:
+          type: "TRAVEL_TO"
+          location-key: "workstation"
+          duration-ticks: 200
+          interruptable: true
+          description: "Geht zum Kartentisch"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Zeichnet Karten"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Kurze Pause"
+
+    # ── BAKER (Bäcker) ───────────────────────────────────────────────────────
     baker:
       display-name: "&aBaecker"
       icon: BREAD
@@ -142,22 +592,588 @@ villagers:
         - COOKIE
       production-interval-seconds: 450
       required-level: 3
-  # Tagesablauf (Ticks)
+      skin-name: "baker"
+      activity-sequence:
+        prepare:
+          type: "PREPARE"
+          location-key: "storage"
+          duration-ticks: 200
+          interruptable: true
+          description: "Holt Zutaten"
+        work:
+          type: "WORK"
+          location-key: "workstation"
+          duration-ticks: 1800
+          interruptable: false
+          description: "Backt"
+        lunch:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 600
+          delay-ticks: 40
+          interruptable: true
+          actions:
+            - "get-food"
+            - "eat-food"
+          description: "Probiert die Ware"
+        rest:
+          type: "IDLE"
+          location-key: ""
+          duration-ticks: 400
+          interruptable: true
+          description: "Pause"
+
+
+  # ============================================================================
+  #  GLOBALER TAGESABLAUF & ZEITPLAN
+  # ============================================================================
+  # Bestimmt die globalen Uhrzeiten des NPC-Tages im Minecraft-Tick-Format.
+  # Minecraft-Tag: 0 (6:00 Uhr morgens) bis 24000 Ticks (nächster Morgen)
+  #
+  # Umrechnungshilfe:
+  #   0     = 06:00 Uhr (Sonnenaufgang)
+  #   2000  = 08:00 Uhr
+  #   6000  = 12:00 Uhr (Mittag)
+  #   10000 = 16:00 Uhr
+  #   13000 = 19:00 Uhr (Sonnenuntergang)
+  #   18000 = 00:00 Uhr (Mitternacht)
   schedule:
-    wake-up: 0       # 06:00
-    work-start: 2000  # 08:00
-    lunch: 6000       # 12:00
-    work-end: 10000   # 16:00
-    sleep: 13000      # 19:00
-  # Beduerfnisse
+    wake-up: 0        # Aufstehen (06:00 Uhr)
+    get-food: 3000    # Wann Essen gesucht wird, wenn Nährstoffe niedrig (09:00 Uhr)
+    work-start: 2000  # Arbeitsbeginn (08:00 Uhr)
+    lunch: 6000       # Mittagspause (12:00 Uhr)
+    work-end: 10000   # Feierabend (16:00 Uhr)
+    sleep: 13000      # Schlafenszeit (19:00 Uhr)
+
+    # Nährstoffverbrauch-Multiplikator je nach aktueller Aktivität.
+    # Basis-Verbrauch wird mit diesem Faktor multipliziert.
+    # Mögliche Aktivitäts-Keys:
+    #   WAKE_UP, WORK, IDLE, SLEEP, GET_FOOD, EAT_FOOD, FLEEING, HEALING
+    # Werte: < 1.0 = geringerer Verbrauch, > 1.0 = erhöhter Verbrauch
+    #
+    # HINWEIS: Dieser Block dient als globaler Fallback für den Scheduler.
+    # Wenn der Eintrag unter 'nutrient-storage.decay-by-activity' leer/null ist,
+    # wird auf diese Werte ausgewichen.
+    nutrient-decay-by-activity:
+      WAKE_UP: 0.85
+      WORK: 1.20      # Arbeit erhöht den Hunger
+      IDLE: 0.35      # Pause verbraucht wenig
+      SLEEP: 0.12     # Schlafen verbraucht minimal
+      GET_FOOD: 0.95
+      EAT_FOOD: 0.20  # Essen verbraucht kaum
+      FLEEING: 1.55   # Flucht verbraucht sehr viel
+      HEALING: 0.95
+
+
+  # ============================================================================
+  #  NÄHRSTOFF-SPEICHER
+  # ============================================================================
+  nutrient-storage:
+    # Maximale Kapazität pro Nährstofftyp (Wert 0–999; Standard: 100)
+    default-capacity-per-nutrient: 100
+
+    # Basis-Abnahme der Nährstoffe pro Minute (Einheiten pro Minute)
+    decay-per-minute: 1.0
+
+    # Aktivitätsbasierter Verbrauchsmultiplikator.
+    # Mögliche Keys: WAKE_UP, WORK, IDLE, SLEEP, GET_FOOD, EAT_FOOD, FLEEING, HEALING
+    #
+    # HINWEIS: Dies ist die primäre Definition, die vom Nährstoffsystem ausgelesen wird.
+    # Bei fehlenden Werten greift das System auf 'schedule.nutrient-decay-by-activity' zurück.
+    decay-by-activity:
+      WAKE_UP: 0.85
+      WORK: 1.20
+      IDLE: 0.35
+      SLEEP: 0.12
+      GET_FOOD: 0.95
+      EAT_FOOD: 0.20
+      FLEEING: 1.55
+      HEALING: 0.95
+
+
+  # ============================================================================
+  #  GRUNDBEDÜRFNISSE (Needs)
+  # ============================================================================
   needs:
+    # Hungerbedürfnis – abgeleitet aus den Nährstoffwerten
     hunger:
+      # Verfall pro Minute in Einheiten (höher = schneller hungrig)
       decay-per-minute: 2.0
+      # Ab diesem Wert (0–100) sucht der NPC dringend nach Essen
       critical-threshold: 20.0
+      # Ab diesem Wert erhält der NPC Schaden durch Hunger (0–100)
+      damage-threshold: 15
+      # Schadensintervall in Ticks bei extremem Hunger (20 Ticks = 1s)
+      damage-interval-ticks: 400
+      # Schaden pro Intervall in halben Herzen (0.5 = ein Viertel Herz)
+      damage-per-interval: 0.5
+      # Echter Entity-Schaden bei extremem Hunger (unabhängig vom GUI-Balken)
+      entity-damage:
+        enabled: false
+        amount: 1.0
+      # Berechnet den Hunger-Wert aus den aktuellen Nährstoffwerten (true empfohlen)
+      display-from-nutrients: true
+
+    # Zufriedenheit (Happiness) – beeinflusst Arbeitsbereitschaft
     happiness:
       decay-per-minute: 1.0
+      # Unter diesem Wert verweigert der NPC die Arbeit (0–100)
       critical-threshold: 30.0
-  # Skill-Baeume
+
+
+  # ============================================================================
+  #  NÄHRSTOFFE IM DETAIL
+  # ============================================================================
+  # Definiert die einzelnen Nährstofftypen, ihre Anzeigenamen und Basisverfallsraten.
+  # Manche Nährstoffe haben zusätzliche Effekt-Felder (z.B. omega_3, sugar).
+  #
+  # Gemeinsame Felder:
+  #   display-name: "<Name>"       - Anzeigename im GUI
+  #   decay-per-minute: <Zahl>     - Abnahmerate pro Minute (in Einheiten)
+  #
+  # Erweiterte Felder (für Nährstoffe mit Effekten):
+  #   duration-seconds: <Zahl>     - Wie lange ein Effekt nach dem Essen anhält
+  #   max-duration-seconds: <Zahl> - Maximale Effektdauer (bei mehrfachem Essen)
+  #   stack-duration: true|false   - Ob die Dauer beim erneuten Essen addiert wird
+  #   multiplier: <Dezimalzahl>    - Basis-Multiplikator des Effekts
+  #   effects:                     - Boni/Mali durch diesen Nährstoff
+  #     <effekt-key>: <Wert>       - Mögliche Effekt-Keys:
+  #       production-speed         - Produktionsgeschwindigkeit (+/-)
+  #       movement-speed           - Bewegungsgeschwindigkeit (+/-)
+  #       xp-gain                  - XP-Gewinn (+/-)
+  #       build-speed              - Baugeschwindigkeit (+/-)
+  #       relationship             - Reputationsänderung (+/-)
+  #       communication            - Kommunikationsfähigkeit (+/-)
+  #     Wert: Dezimalzahl (0.10 = +10%, -0.05 = -5%)
+  #   command-on-consume: "<Befehl>"  - Konsolenbefehl beim Verzehr (Platzhalter: tlb.)
+  nutrients:
+    proteins:
+      display-name: "Eiweiß"
+      decay-per-minute: 0.45
+
+    fats_good:
+      display-name: "Fette (gut)"
+      decay-per-minute: 0.30
+
+    fats_bad:
+      display-name: "Fette (gesättigt)"
+      decay-per-minute: 0.22
+
+    carbohydrates_single:
+      display-name: "Kohlenhydrate (1x)"
+      decay-per-minute: 0.70
+
+    carbohydrates_double:
+      display-name: "Kohlenhydrate (2x)"
+      decay-per-minute: 0.60
+
+    sugar:
+      display-name: "Zucker"
+      decay-per-minute: 0.55
+      duration-seconds: 30
+      max-duration-seconds: 90
+      effects:
+        production-speed: -0.05   # Zu viel Zucker = leichte Produktionsverlangsamung
+        movement-speed: 0.08      # Aber schnellere Bewegung (Hyperzustand)
+
+    omega_3:
+      display-name: "Omega-3-Fettsäure"
+      decay-per-minute: 0.20
+      duration-seconds: 60
+      max-duration-seconds: 180
+      stack-duration: true    # Dauer addiert sich bei mehrfachem Essen
+      multiplier: 1.1
+      effects:
+        production-speed: 0.10  # +10% Produktionsgeschwindigkeit
+        movement-speed: 0.05    # +5% Bewegungsgeschwindigkeit
+      command-on-consume: "say Villager nutzt Omega-3"
+
+
+  # ============================================================================
+  #  FÜTTERUNG & NÄHRSTOFFWERTE VON LEBENSMITTELN
+  # ============================================================================
+  # Definiert, welche Items welche Nährstoffe liefern, wenn ein NPC sie isst.
+  #
+  # AUFBAU UNTER 'recovery':
+  #   <Material>:               - Bukkit-Material-Name des Lebensmittels
+  #     hunger: <Zahl>          - Hungerwert, der sofort wiederhergestellt wird
+  #     <nährstoff-key>: <Zahl> - Nährstoffmenge (Keys aus 'nutrients'-Abschnitt)
+  #     instant-percent: <0-100> - Anteil, der sofort wirkt (Rest über recovery-seconds)
+  #     recovery-seconds: <Zahl> - Sekunden für verzögerte Nährstoffrückgewinnung
+  feeding:
+    # Darf der NPC selbstständig Nahrung aus Truhen im Dorf holen?
+    allow-self-feeding: true
+
+    # Darf der Spieler den NPC per Rechtsklick mit einem Item füttern?
+    allow-player-feeding: true
+
+    # Mindestabstand in Sekunden zwischen zwei Mahlzeiten desselben NPCs
+    feed-interval-seconds: 5
+
+    # Standard-Sofortanteil der Nährstoffe bei Nahrungsaufnahme (0–100%)
+    default-instant-percent: 100
+
+    # Standard-Zeit für verzögerte Nährstoffrückgewinnung in Sekunden (0 = alles sofort)
+    default-recovery-seconds: 0
+
+    # Periodische Nährstoffrückgewinnung (für Recovery-basierte Items)
+    periodic-recovery:
+      enabled: true
+      tick-interval-seconds: 1  # Wie oft die Recovery in Sekunden aktualisiert wird
+
+    # Nährstoffwerte pro Lebensmittel-Item
+    # Alle Nährstoff-Keys müssen im 'nutrients'-Abschnitt definiert sein.
+    recovery:
+      BREAD:
+        hunger: 8
+        proteins: 6
+        fats_good: 1
+        carbohydrates_single: 34
+        sugar: 4
+      CARROT:
+        hunger: 3
+        proteins: 1
+        carbohydrates_single: 8
+        sugar: 3
+      BAKED_POTATO:
+        hunger: 5
+        proteins: 2
+        carbohydrates_single: 24
+        carbohydrates_double: 4
+      COOKIE:
+        hunger: 2
+        carbohydrates_single: 8
+        sugar: 18
+        fats_bad: 2
+      COOKED_BEEF:
+        hunger: 12
+        proteins: 32
+        fats_bad: 6
+      COOKED_SALMON:
+        hunger: 6
+        proteins: 20
+        fats_good: 8
+        omega_3: 6
+      BEETROOT_SOUP:
+        hunger: 6
+        carbohydrates_single: 12
+        sugar: 3
+      MILK_BUCKET:
+        hunger: 4
+        proteins: 6
+        fats_good: 4
+      MUSHROOM_STEW:
+        hunger: 5
+        proteins: 8
+        carbohydrates_single: 12
+      RABBIT_STEW:
+        hunger: 6
+        proteins: 18
+        carbohydrates_single: 14
+      PUMPKIN_PIE:
+        hunger: 8
+        carbohydrates_single: 18
+        sugar: 18
+        fats_bad: 2
+      SWEET_BERRIES:
+        hunger: 2
+        sugar: 8
+        carbohydrates_single: 4
+      MELON_SLICE:
+        hunger: 2
+        carbohydrates_single: 6
+        sugar: 6
+      GLOW_BERRIES:
+        hunger: 1
+        sugar: 5
+        carbohydrates_single: 2
+      COOKED_COD:
+        hunger: 5
+        proteins: 18
+        fats_good: 2
+        omega_3: 4
+      COOKED_PORKCHOP:
+        hunger: 8
+        proteins: 26
+        fats_bad: 8
+      BEETROOT:
+        hunger: 1
+        carbohydrates_single: 4
+        sugar: 2
+      SUSPICIOUS_STEW:
+        hunger: 6
+        proteins: 6
+        carbohydrates_single: 10
+        instant-percent: 50       # Nur 50% sofort, Rest über Zeit
+        recovery-seconds: 20      # Verbleibende 50% über 20 Sekunden
+
+
+  # ============================================================================
+  #  WIEDERBELEBUNG VERSTORBENER DORFBEWOHNER
+  # ============================================================================
+  revival:
+    # Ob Wiederbelebung an der Dorfglocke oder beim Medikus möglich ist.
+    # Wenn aktiviert, findet die Wiederbelebung beim Medikus statt.
+    enabled: true
+
+    # Benötigt eine Freischaltung / Berechtigung.
+    # Die erforderliche Permission ist in den Job-Konfigurationen / Rollen
+    # des Medikus verankert.
+    permission: "village.revival.use"
+
+    # Währungstyp für Wiederbelebungskosten.
+    # Mögliche Werte: global | local
+    currency-type: global
+
+    # Basispreis für die erste Wiederbelebung (in der gewählten Währung)
+    base-cost: 100.0
+
+    # Preiserhöhung bei jedem weiteren Tod desselben NPCs
+    cost-increase-per-use: 50.0
+
+    # Maximaler Wiederbelebungspreis (Deckelung)
+    max-cost: 500.0
+
+    # Abklingzeit nach einer Wiederbelebung in Sekunden (Cooldown)
+    base-cooldown-seconds: 300
+
+    # Erhöhung des Cooldowns pro Tod (in Sekunden)
+    cooldown-increase-per-use-seconds: 120
+
+    # Maximale Abklingzeit (Deckelung; 1800 Sekunden = 30 Minuten)
+    max-cooldown-seconds: 1800
+
+
+  # ============================================================================
+  #  JOB-LAGER (Berufs-spezifischer Inventar-Speicher)
+  # ============================================================================
+  # Definiert, wie viele Inventar-Slots ein Dorfbewohner pro Beruf hat.
+  # Slotanzahl muss Vielfaches von 9 sein (9, 18, 27, 36, 45, 54).
+  job-storage:
+    # Start-Slots beim ersten Rekrutieren (Basisausstattung)
+    base-slots:
+      farmer: 18
+      miner: 18
+      lumberjack: 18
+      carpenter: 18
+      blacksmith: 18
+      mason: 18
+      beekeeper: 18
+      baker: 18
+      brewer: 18
+      fisher: 18
+      hunter: 18
+      guard: 9      # Wachen brauchen wenig Lagerplatz
+      merchant: 27  # Händler brauchen mehr (volle Waren)
+      scholar: 12
+      cartographer: 12
+      medic: 12
+      courier: 27   # Kuriere transportieren viel
+
+    # Zusätzliche Slots pro Skill-Level (stackt sich mit base-slots)
+    slots-per-level:
+      farmer: 9
+      miner: 9
+      lumberjack: 9
+      carpenter: 9
+      blacksmith: 9
+      mason: 9
+      beekeeper: 9
+      baker: 9
+      brewer: 9
+      fisher: 9
+      hunter: 9
+      guard: 9
+      merchant: 9
+      scholar: 9
+      cartographer: 9
+      medic: 9
+      courier: 9
+
+    # Absolute Maximalgrenze der Slots (unabhängig vom Level)
+    max-slots:
+      farmer: 54
+      miner: 54
+      lumberjack: 54
+      carpenter: 54
+      blacksmith: 54
+      mason: 54
+      beekeeper: 54
+      baker: 54
+      brewer: 54
+      fisher: 54
+      hunter: 54
+      guard: 36
+      merchant: 54
+      scholar: 36
+      cartographer: 36
+      medic: 36
+      courier: 54
+
+
+  # ============================================================================
+  #  ERWEITERTE ERNÄHRUNGSMECHANIKEN (Nutrition System)
+  # ============================================================================
+  nutrition:
+    # NPC holt automatisch Nahrung aus Dorftruhen, wenn der Hunger kritisch ist
+    auto-feed-from-chest: true
+
+    # Zusätzlicher Nährstoffverbrauch am Ende jeder Aktivitätsphase
+    # (Multiplikator auf die Phasendauer)
+    activity-end-cost:
+      enabled: true
+      # Mögliche Aktivitäts-Keys: WORK, PREPARE, GATHER, IDLE, SLEEP,
+      #                           WAKE_UP, GET_FOOD, EAT_FOOD, FLEEING, HEALING
+      multipliers:
+        WORK: 1.0
+        PREPARE: 0.5
+        GATHER: 0.8
+        IDLE: 0.3
+        SLEEP: 0.1
+        WAKE_UP: 0.4
+        GET_FOOD: 0.2
+        EAT_FOOD: 0.1
+
+    # Prioritätsliste der bevorzugten Lebensmittel für den Bäcker-NPC
+    # (Bäcker isst zuerst selbst produzierte Waren)
+    # Alle Werte: Bukkit-Material-Namen
+    baker-priority-foods:
+      - BREAD
+      - CAKE
+      - COOKIE
+      - PUMPKIN_PIE
+
+    # Aktivitätsbezogene Nährstoff-Multiplikatoren
+    # Steuert, wie stark einzelne Nährstoffe pro Aktivitätstyp verbraucht werden.
+    # Keys: Aktivitäts-Typ (IDLE, WAKE_UP, WORK, GET_FOOD, EAT_FOOD, FLEEING, HEALING)
+    # Sub-Keys: Nährstoff-Keys aus dem 'nutrients'-Abschnitt
+    activity-nutrient-multipliers:
+      IDLE:
+        proteins: 0.70
+        fats_good: 0.70
+        fats_bad: 0.65
+        carbohydrates_single: 0.65
+        carbohydrates_double: 0.55
+        sugar: 0.55
+        omega_3: 0.50
+      WAKE_UP:
+        proteins: 0.90
+        fats_good: 0.85
+        fats_bad: 0.80
+        carbohydrates_single: 1.00
+        carbohydrates_double: 0.95
+        sugar: 0.90
+        omega_3: 0.80
+      WORK:
+        proteins: 1.00
+        fats_good: 0.90
+        fats_bad: 0.85
+        carbohydrates_single: 1.20
+        carbohydrates_double: 1.10
+        sugar: 1.05
+        omega_3: 0.75
+      GET_FOOD:
+        proteins: 0.85
+        fats_good: 0.85
+        fats_bad: 0.80
+        carbohydrates_single: 1.05
+        carbohydrates_double: 1.00
+        sugar: 0.95
+        omega_3: 0.75
+      EAT_FOOD:
+        proteins: 0.35
+        fats_good: 0.30
+        fats_bad: 0.25
+        carbohydrates_single: 0.30
+        carbohydrates_double: 0.25
+        sugar: 0.20
+        omega_3: 0.20
+      FLEEING:
+        proteins: 0.85
+        fats_good: 1.00
+        fats_bad: 0.90
+        carbohydrates_single: 1.45
+        carbohydrates_double: 1.35
+        sugar: 1.65
+        omega_3: 0.80
+      HEALING:
+        proteins: 1.55
+        fats_good: 1.00
+        fats_bad: 0.85
+        carbohydrates_single: 0.90
+        carbohydrates_double: 0.85
+        sugar: 0.70
+        omega_3: 0.75
+
+    # ── Ausgewogene Ernährung (balanced-diet) ────────────────────────────────
+    balanced-diet:
+      # Ob Nährstoffmangel negative Effekte auf die Produktion hat
+      enabled: true
+      # Prozentwert (0–100): Unter diesem Nährstoffgehalt gilt ein Mangel
+      low-nutrient-threshold: 20
+      # Produktionsgeschwindigkeits-Abzug bei Nährstoffmangel (Dezimal; 0.10 = -10%)
+      production-penalty: 0.10
+      # Prozentwert: Über diesem Zuckerwert treten Hyperaktivitätseffekte auf
+      excess-sugar-threshold: 80
+
+    # ── Jahreszeiten-Verbrauch (Temperatureinfluss) ───────────────────────────
+    seasonal:
+      # Ob Jahreszeiten den Nährstoffverfall beeinflussen
+      enabled: true
+      # Minecraft-Ticks für Winterbeginn und -ende (Tage im Server-Kalender)
+      winter-start: 12000
+      winter-end: 6000
+      # Verbrauchsmultiplikator im Winter (1.25 = +25% Hunger durch Kälte)
+      winter-decay-multiplier: 1.25
+      # Verbrauchsmultiplikator im Sommer (0.9 = -10% Hunger)
+      summer-decay-multiplier: 0.9
+
+    # ── Berufs-spezifische Verbrauchsmultiplikatoren ──────────────────────────
+    # Berufe mit körperlicher Arbeit verbrauchen mehr Nährstoffe.
+    # Alle Berufs-Keys aus dem 'professions'-Abschnitt können hier gelistet werden.
+    # Werte: < 1.0 = weniger Hunger, > 1.0 = mehr Hunger
+    job-decay-multipliers:
+      miner: 1.20       # Bergbau = anstrengend
+      farmer: 1.00
+      lumberjack: 1.05
+      carpenter: 1.00
+      baker: 0.95       # Bäcker sitzt viel
+      blacksmith: 1.10
+      mason: 1.05
+      beekeeper: 0.95
+      brewer: 0.90
+      fisher: 1.00
+      hunter: 1.10
+      guard: 1.10
+      merchant: 0.95
+      scholar: 0.90     # Gelehrte sitzen viel
+      cartographer: 0.90
+      medic: 1.00
+      courier: 1.05
+
+    # ── Hunger-Warnungen an Spieler ───────────────────────────────────────────
+    warnings:
+      # Ob Hunger-Warnungen im Chat/Actionbar angezeigt werden
+      enabled: true
+      # Warnmeldung senden, wenn der Nährstoffwert unter diesen Prozentwert fällt (0–100)
+      threshold: 25
+      # Mindestabstand in Sekunden zwischen zwei Warnungen desselben NPCs (Cooldown)
+      cooldown-seconds: 300
+
+    # ── Nährstoffspeicher-Upgrades ────────────────────────────────────────────
+    upgrades:
+      # Schlüssel des Upgrades in village.yml (muss dort existieren)
+      nutrient-capacity-level-key: nutrient-capacity
+      # Zusätzliche Kapazität pro Nährstofftyp pro Upgrade-Stufe
+      capacity-per-level: 15
+
+
+  # ============================================================================
+  #  SKILL-BAUM DER DORFBEWOHNER
+  # ============================================================================
   skill-tree:
+    # Maximales erreichbares Level in einem einzelnen Skill (1–100)
     max-skill-level: 10
+    # Benötigte NPC-Erfahrungspunkte (XP) pro Levelup
+    # XP wird durch Quests, Handel und Arbeit gewonnen
     xp-per-level: 100

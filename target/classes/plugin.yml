@@ -10,6 +10,9 @@ commands:
     description: Haupt-Dorf-Befehl
     usage: /village
     aliases: [dorf, v]
+  hunger:
+    description: Zeigt Nährwert-Scoreboard an/aus
+    usage: /hunger
   trade:
     description: Öffnet das Handelsmenü für lokale, externe, P2P oder Marktplatz-Trades
     usage: /trade <balance|local|external|player|shop|history>

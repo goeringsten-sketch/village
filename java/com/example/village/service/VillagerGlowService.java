@@ -54,6 +54,37 @@ public final class VillagerGlowService {
     }
 
     /**
+     * Zeigt einen einzelnen Dorfbewohner temporär mit Glowing-Effekt an.
+     */
+    public void showVillagerTemporarily(Player player, CustomVillager villager) {
+        Integer oldTaskId = activeTempGlowTasks.get(player.getUniqueId());
+        if (oldTaskId != null && oldTaskId > 0) {
+            Bukkit.getScheduler().cancelTask(oldTaskId);
+        }
+
+        Entity entity = findVillagerEntity(villager);
+        if (entity instanceof LivingEntity living) {
+            living.setGlowing(true);
+        }
+
+        int durationTicks = configManager.getVillagerGlowTempDurationTicks();
+        final int[] taskId = new int[1];
+        taskId[0] = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Entity targetEntity = findVillagerEntity(villager);
+            if (targetEntity instanceof LivingEntity living) {
+                living.setGlowing(false);
+            }
+
+            Integer currentTaskId = activeTempGlowTasks.get(player.getUniqueId());
+            if (currentTaskId != null && currentTaskId == taskId[0]) {
+                activeTempGlowTasks.remove(player.getUniqueId());
+            }
+        }, durationTicks).getTaskId();
+
+        activeTempGlowTasks.put(player.getUniqueId(), taskId[0]);
+    }
+
+    /**
      * Zeigt Dorfbewohner temporär mit Glowing (ca. 15 Sekunden oder konfiguriert).
      */
     private void showVillagersTemporarily(Player player, Village village) {
@@ -73,17 +104,21 @@ public final class VillagerGlowService {
 
         // Timer für Glowing-Entfernung starten
         int durationTicks = configManager.getVillagerGlowTempDurationTicks();
-        int taskId = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        final int[] taskId = new int[1];
+        taskId[0] = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             for (CustomVillager v : village.getVillagers()) {
                 Entity entity = findVillagerEntity(v);
                 if (entity instanceof LivingEntity living) {
                     living.setGlowing(false);
                 }
             }
-            activeTempGlowTasks.remove(player.getUniqueId());
+            Integer currentTaskId = activeTempGlowTasks.get(player.getUniqueId());
+            if (currentTaskId != null && currentTaskId == taskId[0]) {
+                activeTempGlowTasks.remove(player.getUniqueId());
+            }
         }, durationTicks).getTaskId();
 
-        activeTempGlowTasks.put(player.getUniqueId(), taskId);
+        activeTempGlowTasks.put(player.getUniqueId(), taskId[0]);
     }
 
     /**

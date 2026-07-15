@@ -6,6 +6,7 @@ import com.example.village.hook.VaultHook;
 import com.example.village.model.Village;
 import com.example.village.service.LevelService;
 import com.example.village.util.ItemBuilder;
+import com.example.village.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -49,7 +50,7 @@ public final class LevelupGui {
 
     public void open() {
         VillageMenuHolder holder = new VillageMenuHolder(VillageMenuHolder.MenuType.LEVELUP);
-        Inventory inv = Bukkit.createInventory(holder, 54, "§6§lDorf Levelup");
+        Inventory inv = Bukkit.createInventory(holder, 54, MessageUtil.text("ui.levelup.title", "§6§lDorf Levelup"));
 
         // Row 1: Info
         inv.setItem(4, createBellItem());
@@ -68,25 +69,25 @@ public final class LevelupGui {
                 && levelService.isLevelUpAvailable(village);
         if (levelupReady) {
             inv.setItem(49, new ItemBuilder(Material.LIME_CONCRETE)
-                    .name("§a§lLevelup durchführen")
-                    .lore("§7Klick um das Dorf hochzuleveln")
+                    .name(MessageUtil.text("ui.levelup.confirm", "§a§lLevelup durchführen"))
+                    .lore(MessageUtil.text("ui.levelup.confirm-lore", "§7Klick um das Dorf hochzuleveln"))
                     .build());
         } else {
             inv.setItem(49, new ItemBuilder(Material.RED_CONCRETE)
-                    .name("§c§lLevelup nicht verfügbar")
-                    .lore("§7Nicht alle Voraussetzungen erfüllt")
+                    .name(MessageUtil.text("ui.levelup.unavailable", "§c§lLevelup nicht verfügbar"))
+                    .lore(MessageUtil.text("ui.levelup.unavailable-lore", "§7Nicht alle Voraussetzungen erfüllt"))
                     .build());
         }
 
         // Back Button
         inv.setItem(45, new ItemBuilder(Material.ARROW)
-                .name("§e§lZurück")
-                .lore("§7Zurück zum Dorf-Menü")
+                .name(MessageUtil.text("ui.generic.back", "§e§lZurück"))
+                .lore(MessageUtil.text("ui.levelup.back-lore", "§7Zurück zum Dorf-Menü"))
                 .build());
 
         // Close Button
         inv.setItem(53, new ItemBuilder(Material.BARRIER)
-                .name("§c§lSchließen")
+                .name(MessageUtil.text("ui.generic.close", "§c§lSchließen"))
                 .build());
 
         player.openInventory(inv);
@@ -101,8 +102,8 @@ public final class LevelupGui {
 
         if (nextLevel > maxLevel) {
             return new ItemBuilder(Material.BELL)
-                    .name("§6§lDorf Level §e" + village.getLevel() + " §6(MAX)")
-                    .lore("§7Maximales Level erreicht!")
+                    .name(MessageUtil.text("ui.levelup.level-max-prefix", "§6§lDorf Level §e") + village.getLevel() + MessageUtil.text("ui.levelup.level-max-suffix", " §6(MAX)"))
+                    .lore(MessageUtil.text("ui.levelup.max-reached", "§7Maximales Level erreicht!"))
                     .build();
         }
 
@@ -115,11 +116,12 @@ public final class LevelupGui {
         double progress = Math.min(1.0, (double) current / required);
 
         ItemBuilder builder = new ItemBuilder(material)
-                .name("§6§lDorf Level §e" + village.getLevel() + " §6→ §e" + nextLevel);
+                .name(MessageUtil.text("ui.levelup.level-prefix", "§6§lDorf Level §e") + village.getLevel()
+                        + MessageUtil.text("ui.levelup.level-arrow", " §6→ §e") + nextLevel);
         if (hasLevelup) builder.glow(true);
 
         List<String> lore = new ArrayList<>();
-        lore.add("§7" + current + " / " + required + " Punkte");
+        lore.add(MessageUtil.text("ui.levelup.points", "§7") + current + " / " + required + MessageUtil.text("ui.levelup.points-suffix", " Punkte"));
 
         // Progress bar
         int barLength = 20;
@@ -132,7 +134,7 @@ public final class LevelupGui {
 
         if (hasLevelup) {
             lore.add("");
-            lore.add("§a§lLevelup verfügbar!");
+            lore.add(MessageUtil.text("ui.levelup.available", "§a§lLevelup verfügbar!"));
         }
 
         builder.lore(lore.toArray(new String[0]));
@@ -246,19 +248,20 @@ public final class LevelupGui {
         int required = configManager.getPointsForLevel(village.getLevel());
 
         inv.setItem(10, new ItemBuilder(Material.EXPERIENCE_BOTTLE)
-                .name("§b§lAktuelle Punkte")
-                .lore("§e" + current + " §7Dorfpunkte")
+                .name(MessageUtil.text("ui.levelup.current-points", "§b§lAktuelle Punkte"))
+                .lore(MessageUtil.text("ui.levelup.current-points-lore", "§e") + current + MessageUtil.text("ui.levelup.current-points-suffix", " §7Dorfpunkte"))
                 .build());
 
         inv.setItem(13, new ItemBuilder(Material.TARGET)
-                .name("§b§lErforderlich")
-                .lore("§e" + required + " §7Punkte für Level §e" + (village.getLevel() + 1))
+                .name(MessageUtil.text("ui.levelup.required", "§b§lErforderlich"))
+                .lore(MessageUtil.text("ui.levelup.required-lore-prefix", "§e") + required
+                        + MessageUtil.text("ui.levelup.required-lore-middle", " §7Punkte für Level §e") + (village.getLevel() + 1))
                 .build());
 
         int pointsNeeded = Math.max(0, required - current);
         inv.setItem(16, new ItemBuilder(Material.LIME_STAINED_GLASS_PANE)
-                .name("§b§lBis zum Levelup")
-                .lore("§e" + pointsNeeded + " §7Punkte benötigt")
+                .name(MessageUtil.text("ui.levelup.remaining", "§b§lBis zum Levelup"))
+                .lore(MessageUtil.text("ui.levelup.remaining-lore-prefix", "§e") + pointsNeeded + MessageUtil.text("ui.levelup.remaining-lore-suffix", " §7Punkte benötigt"))
                 .build());
     }
 
@@ -269,8 +272,8 @@ public final class LevelupGui {
 
         if (prerequisites == null || prerequisites.isEmpty()) {
             inv.setItem(22, new ItemBuilder(Material.GREEN_CONCRETE)
-                    .name("§a§lKeine Voraussetzungen")
-                    .lore("§7Level §e" + nextLevel + " §7kann direkt freigeschaltet werden")
+                    .name(MessageUtil.text("ui.levelup.no-prereq", "§a§lKeine Voraussetzungen"))
+                    .lore(MessageUtil.text("ui.levelup.no-prereq-lore-prefix", "§7Level §e") + nextLevel + MessageUtil.text("ui.levelup.no-prereq-lore-suffix", " §7kann direkt freigeschaltet werden"))
                     .build());
             return;
         }
@@ -281,7 +284,7 @@ public final class LevelupGui {
         if (prerequisites.containsKey("buildings")) {
             @SuppressWarnings("unchecked")
             List<String> requiredBuildings = (List<String>) prerequisites.get("buildings");
-            prerequisites_list.add("§6Gebäude:");
+            prerequisites_list.add(MessageUtil.text("ui.levelup.prereq-buildings", "§6Gebäude:"));
             for (String building : requiredBuildings) {
                 boolean hasBuilding = village.getBuildings().stream()
                         .anyMatch(b -> b.getTypeKey().equalsIgnoreCase(building));
@@ -296,7 +299,7 @@ public final class LevelupGui {
             int current = village.getVillagers().size();
             boolean met = current >= required;
             String status = met ? "§a✓" : "§c✗";
-            prerequisites_list.add("§6Dorfbewohner: " + status + current + " / " + required);
+            prerequisites_list.add(MessageUtil.text("ui.levelup.prereq-villagers", "§6Dorfbewohner: ") + status + current + " / " + required);
         }
 
         // Check permission
@@ -304,7 +307,7 @@ public final class LevelupGui {
             String perm = (String) prerequisites.get("permission");
             boolean hasPermission = player.hasPermission(perm);
             String status = hasPermission ? "§a✓" : "§c✗";
-            prerequisites_list.add("§6Permission: " + status + perm);
+            prerequisites_list.add(MessageUtil.text("ui.levelup.prereq-permission", "§6Permission: ") + status + perm);
         }
 
         // Display prerequisites
@@ -324,16 +327,16 @@ public final class LevelupGui {
         int required = configManager.getPointsForLevel(village.getLevel());
 
         inv.setItem(28, new ItemBuilder(Material.EXPERIENCE_BOTTLE)
-                .name("§c§lKosten - Dorfpunkte")
-                .lore("§e-" + required + " §7Punkte")
+                .name(MessageUtil.text("ui.levelup.cost-points", "§c§lKosten - Dorfpunkte"))
+                .lore(MessageUtil.text("ui.levelup.cost-points-lore", "§e-") + required + MessageUtil.text("ui.levelup.cost-points-suffix", " §7Punkte"))
                 .build());
 
         // Global currency cost (if configured)
         double globalCost = configManager.getLevelupCost(nextLevel, "global");
         if (globalCost > 0) {
             inv.setItem(31, new ItemBuilder(Material.GOLD_INGOT)
-                    .name("§c§lKosten - Geld")
-                    .lore("§e-" + vaultHook.format(globalCost))
+                    .name(MessageUtil.text("ui.levelup.cost-money", "§c§lKosten - Geld"))
+                    .lore(MessageUtil.text("ui.levelup.cost-money-lore", "§e-") + vaultHook.format(globalCost))
                     .build());
         }
 
@@ -341,8 +344,8 @@ public final class LevelupGui {
         double localCost = configManager.getLevelupCost(nextLevel, "local");
         if (localCost > 0) {
             inv.setItem(34, new ItemBuilder(Material.EMERALD)
-                    .name("§c§lKosten - Lokale Währung")
-                    .lore("§e-" + localCost)
+                    .name(MessageUtil.text("ui.levelup.cost-local", "§c§lKosten - Lokale Währung"))
+                    .lore(MessageUtil.text("ui.levelup.cost-local-lore", "§e-") + localCost)
                     .build());
         }
     }

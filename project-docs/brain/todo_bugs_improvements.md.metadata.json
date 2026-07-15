@@ -1,0 +1,5 @@
+{
+  "summary":  "Todo-Liste mit gefundenen Bugs und Verbesserungsvorschlägen für das Village Plugin. Kategorisiert in: Kritische Bugs (doppelte Definitionen, falsche required_villager_job-Werte, fehlende Konsistenz), mittlere Bugs (Duplikate in buildings.yml, fehlendes Fishing-NPC-Job), und Verbesserungen (fehlende Validierung, Performance-Optimierungen, Fehlende Features wie NPC-Wiederbelebung-UI, Achievements-System).",
+  "updatedAt":  "2026-07-01T18:34:11.874750400Z",
+  "userFacing":  true
+}

@@ -4,6 +4,7 @@ import com.example.village.model.Village;
 import com.example.village.service.LevelService;
 import com.example.village.service.VillageManager;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -51,6 +52,9 @@ public final class VillagePointsListener implements Listener {
 
     @EventHandler
     public void onEntityKill(EntityDeathEvent event) {
+        if (event.getEntity() instanceof Villager) {
+            return;
+        }
         Player killer = event.getEntity().getKiller();
         if (killer == null) return;
 

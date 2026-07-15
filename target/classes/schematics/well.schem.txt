@@ -1,0 +1,3 @@
+# Standard-Schematic: Brunnen
+# Erstelle diese Datei mit WorldEdit: //schem save well.schem
+# Ersetze diese Platzhalter-Datei mit der echten .schem Datei

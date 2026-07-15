@@ -1,13 +1,57 @@
-# ============================================================
-# Quests-System Konfiguration
-# ============================================================
+# ==============================================================================
+#  Village Plugin - Quests-, Skills- und NPC-Konfiguration (quests-and-villagers.yml)
+# ==============================================================================
+#  Definiert das Quest-System, NPC-Fähigkeiten (Skills), das Dialog-System,
+#  das Reputationssystem sowie Performance-Limits für Dorfbewohner.
+#
+#  HINWEISE ZU MATERIAL-NAMEN:
+#  - Items/Blöcke: Bukkit-Material-Enum (GROSSBUCHSTABEN)
+#    → Referenz: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
+#  - Platzhalter in Dialogen: {player_name}
+# ==============================================================================
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  QUESTS-SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+# Definiert die verfügbaren Aufgaben für Spieler im Dorf.
+#
+# AUFBAU EINER QUEST (Felder-Referenz):
+#   <quest-key>:                         - Eindeutiger Schlüssel (keine Leerzeichen, Kleinbuchstaben)
+#     title: "<Titel>"                   - Anzeigename der Quest im GUI
+#     description: "<Beschreibung>"      - Ausführlichere Beschreibung
+#     objective: "<Ziel-Text>"           - Aufgabentext für den Spieler
+#     objective-type: <Typ>             - (optional) Interner Objective-Typ:
+#                                          collect-items | feed-villagers | kill-mobs |
+#                                          trade | recruit-villager | build-building
+#     objective-count: <Zahl>           - (optional) Ziel-Anzahl für objective-type
+#     required-village-level: <Zahl>    - Mindest-Dorflevel für diese Quest
+#     min-reputation: <Zahl>            - Mindest-Reputation des Spielers (-100 bis +100)
+#     is-daily: true | false            - Ob die Quest täglich zurückgesetzt wird
+#     prerequisites:                     - (optional) Liste von Quest-Keys, die vorher
+#       - <quest-key>                      abgeschlossen sein müssen
+#     reward:
+#       village-points: <Zahl>           - Dorfpunkte-Belohnung
+#       money:
+#         global: <Dezimalzahl>          - Belohnung in globaler Währung
+#         local: <Dezimalzahl>           - Belohnung in lokaler Dorfwährung
+#       villager-xp: <Zahl>              - XP für den questgebenden Dorfbewohner
+#       items:                           - Items als Belohnung
+#         <Material>: <Menge>            - Bukkit-Material-Name: Anzahl
+# ══════════════════════════════════════════════════════════════════════════════
 quests:
+
+  # Quest: Einsteiger – Holz sammeln
   starter-quest-1:
     title: "Willkommen!"
     description: "Sammle 10 Holz für das Dorf."
     objective: "10x OAK_LOG sammeln"
+    objective-type: collect-items
+    objective-count: 10
+    required-items:
+      OAK_LOG: 10
     required-village-level: 1
-    min-reputation: -100
+    min-reputation: -100  # Zugänglich für alle, auch unbeliebte Spieler
     is-daily: false
     reward:
       village-points: 50
@@ -18,10 +62,13 @@ quests:
       items:
         EMERALD: 2
 
+  # Quest: Dorfbewohner rekrutieren (setzt starter-quest-1 voraus)
   recruitment-quest:
     title: "Neue Bürger"
     description: "Rekrutiere einen Dorfbewohner."
     objective: "Rekrutiere einen Villager"
+    objective-type: recruit-villager
+    objective-count: 1
     required-village-level: 5
     min-reputation: 0
     is-daily: false
@@ -31,17 +78,20 @@ quests:
         global: 250
         local: 0.0
       villager-xp: 20
-      items: {}
+      items: {}   # Keine Item-Belohnung
     prerequisites:
       - starter-quest-1
 
+  # Quest: Tägliche Handelsmission (täglich wiederholbar)
   trade-quest:
     title: "Handel lernen"
     description: "Handelt mit 5 verschiedenen Villagern."
     objective: "5x mit NPCs handeln"
+    objective-type: trade
+    objective-count: 5
     required-village-level: 3
     min-reputation: -50
-    is-daily: true
+    is-daily: true  # Täglich reset: Spieler können diese Quest jeden Tag erneut machen
     reward:
       village-points: 25
       money:
@@ -50,10 +100,15 @@ quests:
       villager-xp: 5
       items: {}
 
+  # Quest: Feldarbeit (tägliche Ernte-Mission)
   farming-mission:
     title: "Ernte"
     description: "Helfe dem Bauern mit der Ernte."
     objective: "50x Weizen sammeln"
+    objective-type: collect-items
+    objective-count: 50
+    required-items:
+      WHEAT: 50
     required-village-level: 2
     min-reputation: -30
     is-daily: true
@@ -65,76 +120,266 @@ quests:
       villager-xp: 8
       items: {}
 
-# ============================================================
-# Skills-System Konfiguration
-# ============================================================
+  # Quest: Dorfbewohner füttern (mit explizitem objective-type)
+  feed-villagers:
+    title: "Versorgung"
+    description: "Fuettere Dorfbewohner mit ausgewogener Nahrung."
+    objective: "5 Dorfbewohner fuettern"
+    # Expliziter Objective-Typ (wird vom Plugin zur Fortschrittsmessung genutzt)
+    # Mögliche Werte: collect-items | feed-villagers | kill-mobs | trade |
+    #                 recruit-villager | build-building
+    objective-type: feed-villagers
+    objective-count: 5
+    required-village-level: 2
+    min-reputation: 0
+    is-daily: true
+    reward:
+      village-points: 40
+      money:
+        global: 80
+        local: 0.0
+      villager-xp: 10
+      items:
+        BREAD: 8
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  EARLYGAME-QUESTS (Level 1–3)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  # Quest: Ressourcen-Sammlung für erste Gebäude-Investition
+  earlygame-resources:
+    title: "Dorfinvestitionen"
+    description: "Sammle Ressourcen für den Bau von Dorfinfrastruktur."
+    objective: "10x Stein + 5x Bretter sammeln"
+    objective-type: collect-items
+    objective-count: 15
+    required-items:
+      STONE: 10
+      OAK_PLANKS: 5
+    required-village-level: 1
+    min-reputation: -100
+    is-daily: false
+    reward:
+      village-points: 75
+      money:
+        global: 200
+        local: 0.0
+      villager-xp: 15
+      items:
+        EMERALD: 5
+    prerequisites: []
+
+  # Quest: Erste Ernte für Dorfversorgung
+  earlygame-first-harvest:
+    title: "Erste Ernte"
+    description: "Sammle Weizen und Karotten für die Dorfversorgung."
+    objective: "20x Weizen + 10x Karotten sammeln"
+    objective-type: collect-items
+    objective-count: 30
+    required-items:
+      WHEAT: 20
+      CARROT: 10
+    required-village-level: 1
+    min-reputation: -50
+    is-daily: false
+    reward:
+      village-points: 60
+      money:
+        global: 150
+        local: 0.0
+      villager-xp: 12
+      items: {}
+    prerequisites:
+      - earlygame-resources
+
+  # Quest: Dorfverstärkung durch Metallressourcen
+  earlygame-metal-gathering:
+    title: "Eisenabbau"
+    description: "Sammle Eisenerz und Kohle für Dorfwerkzeuge."
+    objective: "8x Eisenerz + 6x Kohle sammeln"
+    objective-type: collect-items
+    objective-count: 14
+    required-items:
+      IRON_ORE: 8
+      COAL: 6
+    required-village-level: 2
+    min-reputation: -30
+    is-daily: false
+    reward:
+      village-points: 80
+      money:
+        global: 250
+        local: 10.0
+      villager-xp: 18
+      items:
+        IRON_INGOT: 4
+    prerequisites:
+      - earlygame-first-harvest
+
+  # Quest: Handelsbeziehungen aufbauen (täglich wiederholbar für konstante Einnahmen)
+  earlygame-trade-basics:
+    title: "Handelskontakte"
+    description: "Handel mit 3 verschiedenen Villagern um Beziehungen zu stärken."
+    objective: "3x mit NPCs handeln"
+    objective-type: trade
+    objective-count: 3
+    required-village-level: 1
+    min-reputation: -100
+    is-daily: true
+    reward:
+      village-points: 20
+      money:
+        global: 50
+        local: 5.0
+      villager-xp: 5
+      items: {}
+    prerequisites: []
+
+  # Quest: Dorf-Level erhöhen durch Engagement
+  earlygame-level-boost:
+    title: "Engagement"
+    description: "Sammle Dorfpunkte durch verschiedene Aktivitäten."
+    objective: "Sammle 100 Dorfpunkte"
+    objective-type: collect-items
+    objective-count: 100
+    required-items:
+      # Hinweis: Dies ist ein Placeholder; Dorfpunkte sind keine Items.
+      # Diese Quest dient aktuell nur als Dokumentation.
+      # Echte Implementierung würde custom objective-handler benötigen (siehe featurerequest.md).
+    required-village-level: 3
+    min-reputation: 0
+    is-daily: false
+    reward:
+      village-points: 150
+      money:
+        global: 500
+        local: 25.0
+      villager-xp: 25
+      items:
+        EMERALD: 10
+        DIAMOND: 1
+    prerequisites:
+      - earlygame-metal-gathering
+      - earlygame-trade-basics
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SKILLS-SYSTEM (NPC-Fähigkeiten)
+# ══════════════════════════════════════════════════════════════════════════════
+# Dorfbewohner können Skills leveln, um Boni (Produktion, Kampf, Handel) zu erhalten.
+#
+# AUFBAU EINES SKILLS:
+#   <skill-key>:               - Eindeutiger Schlüssel (Kleinbuchstaben)
+#     max-level: <Zahl>        - Maximales Skill-Level (1–100)
+#     base-cost:               - Basiskosten für das erste Levelup
+#       global: <Dezimalzahl>  - In globaler Währung
+#       local: <Dezimalzahl>   - In lokaler Dorfwährung
+#     description: "<Text>"    - Beschreibung des Skill-Effekts
+#
+# HINWEIS: Tatsächliche Skill-Effekte (Boni) werden im Java-Code definiert.
+#          Die config steuert nur Limits und Kosten.
+# ══════════════════════════════════════════════════════════════════════════════
 skills:
+
+  # ── Landwirtschafts-Skills ─────────────────────────────────────────────────
+
+  # Skill: Anbau-Effizienz (Farming)
   anbau:
     max-level: 20
     base-cost:
       global: 100
       local: 0.0
     description: "Verbessert Anbau-Effizienz"
+
+  # Skill: Ernte-Ausbeute
   ernte:
     max-level: 20
     base-cost:
       global: 100
       local: 0.0
     description: "Erhöht Ernte-Ausbeute"
+
+  # ── Produktions-Skills ─────────────────────────────────────────────────────
+
+  # Skill: Bearbeitungs-Effizienz (reduziert Herstellungsdauer)
   effizienz:
     max-level: 20
     base-cost:
       global: 150
       local: 0.0
     description: "Reduziert Bearbeitungszeit"
+
+  # ── Handels-Skills ────────────────────────────────────────────────────────
+
+  # Skill: Verhandlungsgeschick (verbessert Handelskonditionen)
   verhandlung:
     max-level: 15
     base-cost:
       global: 200
       local: 0.0
     description: "Verbessert NPC-Handel"
+
+  # Skill: Preisnachlass (senkt Einkaufspreise)
   preise:
     max-level: 15
     base-cost:
       global: 150
       local: 0.0
     description: "Bessere Handelspreise"
+
+  # Skill: Warenbestand (erhöht maximalen Lagerbestand)
   bestand:
     max-level: 10
     base-cost:
       global: 100
       local: 0.0
     description: "Erhöht Handels-Bestand"
+
+  # ── Kampf-Skills ──────────────────────────────────────────────────────────
+
+  # Skill: Kampf (erhöht Schaden von Wachen)
   kampf:
     max-level: 20
     base-cost:
       global: 200
       local: 0.0
     description: "Erhöht Kampf-Schaden"
+
+  # Skill: Kampfreichweite (erhöht Angriffsreichweite von Wachen)
   reichweite:
     max-level: 15
     base-cost:
       global: 150
       local: 0.0
     description: "Erhöht Kampf-Reichweite"
+
+  # Skill: Kampfreflexe (erhöht Ausweichrate und Blocken)
   reflexe:
     max-level: 15
     base-cost:
       global: 150
       local: 0.0
     description: "Erhöht Ausweichfähigkeit"
+
+  # ── Forschungs-Skills ─────────────────────────────────────────────────────
+
+  # Skill: Akademisches Wissen (beschleunigt Forschungsfortschritt)
   wissen:
     max-level: 10
     base-cost:
       global: 250
       local: 0.0
     description: "Erhöht Forschungs-Tempo"
+
+  # Skill: Forschungsdrang (ermöglicht schnelleres Upgrade-Freischalten)
   forschung:
     max-level: 15
     base-cost:
       global: 300
       local: 0.0
     description: "Freischaffung neuer Upgrades"
+
+  # Skill: Lagertechnik (erhöht Lagerkapazität)
   speicherung:
     max-level: 10
     base-cost:
@@ -142,9 +387,31 @@ skills:
       local: 0.0
     description: "Erhöht Lager-Kapazität"
 
-# ============================================================
-# Dialog-System Konfiguration
-# ============================================================
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DIALOG-SYSTEM (NPC-Nachrichten)
+# ══════════════════════════════════════════════════════════════════════════════
+# Zufällige Sprechblasen/Chat-Nachrichten von Dorfbewohnern in verschiedenen Situationen.
+#
+# AUFBAU:
+#   - Jede Kategorie (z.B. GREETING) enthält beliebig viele Einträge
+#   - Schlüssel der Einträge sind frei wählbar (z.B. hello-1, hello-2, ...)
+#   - Bei jedem Auslösen wird ein zufälliger Eintrag aus der Kategorie gewählt
+#   - Unterstützter Platzhalter: {player_name} (wird durch den Spielernamen ersetzt)
+#
+# KATEGORIE-TYPEN (werden intern vom Plugin ausgelöst):
+#   GREETING     - Beim Anklicken des Dorfbewohners
+#   GOODBYE      - Beim Beenden der Interaktion
+#   WORKING      - Wenn der NPC gerade arbeitet und angesprochen wird
+#   IDLE_CHAT    - Allgemeiner Smalltalk im Leerlauf
+#   HUNGRY       - Wenn der NPC Hunger hat (Nährstoffe niedrig)
+#   SLEEPING     - Wenn der NPC schläft und gestört wird
+#   QUEST_OFFER  - Wenn der NPC eine Quest anbietet
+#   COMPLAINT    - Bei Unzufriedenheit (z.B. niedrige Reputation)
+#   HAPPY        - Bei hoher Zufriedenheit / Glück
+#   FLEEING      - Wenn der NPC vor Monstern flüchtet
+#   TRADING      - Beim Öffnen des Handelsfensters
+# ══════════════════════════════════════════════════════════════════════════════
 messages:
   dialogues:
     GREETING:
@@ -206,48 +473,70 @@ messages:
       trading-2: "Ich habe gute Angebote!"
       trading-3: "Interessiert dich etwas?"
 
-# ============================================================
-# Beziehungs-System
-# ============================================================
-relationships:
-  reputation-thresholds:
-    hated: -50
-    disliked: -20
-    neutral: 20
-    friendly: 50
-    loved: 100
-  
-  # Ausschüttungen der Reputation
-  reputation-rewards:
-    quest-complete: 10
-    trade: 2
-    gift: 5
-    hit: -10
-    theft: -30
 
-# ============================================================
-# Villager-Limits & Kosten
-# ============================================================
-villager-limits:
-  base-max: 5
-  per-level: 1
-  per-house: 2
+# ══════════════════════════════════════════════════════════════════════════════
+#  BEZIEHUNGS-SYSTEM (Reputation / Ruf des Spielers)
+# ══════════════════════════════════════════════════════════════════════════════
+relationships:
+
+  # Reputation-Schwellenwerte für die Kategorisierung des Spieler-Rufs
+  # Jede Stufe hat einen Namen und einen Min-Wert.
+  # Werte: -100 (verhasst) bis +100 (geliebt)
+  reputation-thresholds:
+    hated: -50      # Gehasst (unter -50: NPCs flüchten, verweigern Handel)
+    disliked: -20   # Unbeliebt (eingeschränkter Handel)
+    neutral: 20     # Neutral (Standardverhalten)
+    friendly: 50    # Freundlich (bessere Preise, mehr Quests)
+    loved: 100      # Geliebt (maximale Boni, Spezialquests)
+
+  # Rufpunkte-Änderungen bei bestimmten Spieleraktionen
+  # Positive Werte = Rufgewinn, negative Werte = Rufverlust
+  reputation-rewards:
+    quest-complete: 10  # Erledigen einer Quest
+    trade: 2            # Erfolgreicher Handel mit einem Dorfbewohner
+    gift: 5             # Geschenk an einen Dorfbewohner übergeben
+    hit: -10            # Schlagen eines Dorfbewohners (Angriff)
+    theft: -30          # Diebstahl aus Dorftruhen
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  REKRUTIERUNGSKOSTEN
+# ══════════════════════════════════════════════════════════════════════════════
 
 villager-costs:
-  recruitment: 100  # Dorfpunkte
+  # Kosten für das Anwerben eines neuen Dorfbewohners (in Dorfpunkten)
+  recruitment: 100
+
+  # Kosten für die Umbenennung eines Dorfbewohners mittels Namensschild (in Dorfpunkten)
   rename: 10
-  skill-upgrade: 50  # Base cost, multipliziert mit Level
+
+  # Basiskosten für Skill-Upgrades (in Dorfpunkten; multipliziert mit Ziellevel)
+  # Beispiel: skill-upgrade: 50, Upgrade auf Level 3 = 50 * 3 = 150 Punkte
+  skill-upgrade: 50
+
+  # Kosten für eine Berufsänderung eines Dorfbewohners (in Dorfpunkten)
   job-change: 25
 
-# ============================================================
-# Performance & Optimierung
-# ============================================================
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PERFORMANCE & OPTIMIERUNG
+# ══════════════════════════════════════════════════════════════════════════════
+# Verhindert Server-Lags bei vielen gleichzeitig aktiven Dorfbewohnern.
 performance:
-  # Chunk-basierte Aktivierung
+  # Nur aktiv, wenn der Chunk des Dorfbewohners geladen ist.
+  # true = kein Tick-Processing für Dorfbewohner in ungeladenen Chunks (empfohlen)
+  # false = alle Dorfbewohner werden immer verarbeitet (kann bei vielen Dörfern laggen)
   chunk-optimization: true
-  # Max villagers pro Tick
+
+  # Maximale Anzahl Dorfbewohner-Updates pro Server-Tick (1 Tick = 50ms)
+  # Niedrig = gleichmäßigere Last, aber langsamer (empfohlen: 5–20)
+  # Hoch = schnellere Verarbeitung, aber möglicherweise Tick-Spitzen
   max-updates-per-tick: 10
-  # Batch-Updates (alle X Ticks)
-  batch-update-interval: 20  # 1 Sekunde
 
+  # Server-weites Gesamt-Limit für Villager-Updates pro Tick.
+  # Verhindert, dass mehrere Dörfer zusammen die gleiche Tick-Spitze auslösen.
+  global-max-updates-per-tick: 50
 
+  # Intervall in Ticks zwischen periodischen Status-Updates aller Dorfbewohner
+  # 20 Ticks = 1 Sekunde. Empfohlen: 20–100 Ticks.
+  batch-update-interval: 20

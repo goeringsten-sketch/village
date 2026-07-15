@@ -1,6 +1,7 @@
 package com.example.village.command;
 
 import com.example.village.config.VillageConfigManager;
+import com.example.village.hook.VaultHook;
 import com.example.village.model.Village;
 import com.example.village.service.CurrencyService;
 import com.example.village.service.VillageManager;
@@ -20,21 +21,29 @@ public final class GlobalMoneyCommand implements CommandExecutor, TabCompleter {
     private final VillageConfigManager config;
     private final VillageManager villageManager;
     private final CurrencyService currencyService;
+    private final VaultHook vaultHook;
     private final Map<UUID, PendingGlobalTransfer> pending = new ConcurrentHashMap<>();
 
-    public GlobalMoneyCommand(VillageConfigManager config, VillageManager villageManager, CurrencyService currencyService) {
+    public GlobalMoneyCommand(VillageConfigManager config, VillageManager villageManager,
+                              CurrencyService currencyService, VaultHook vaultHook) {
         this.config = config;
         this.villageManager = villageManager;
         this.currencyService = currencyService;
+        this.vaultHook = vaultHook;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player player)) return true;
         String cmd = command.getName().toLowerCase();
-        if ("sendmoney".equals(cmd)) return handleSendMoney(player, args);
-        if ("balance".equals(cmd)) return handleBalance(player, args);
-        if ("balances".equals(cmd)) return handleBalances(player, args);
+        if ("sendmoney".equals(cmd)) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage("Nur Spieler koennen Geld senden.");
+                return true;
+            }
+            return handleSendMoney(player, args);
+        }
+        if ("balance".equals(cmd)) return handleBalance(sender, args);
+        if ("balances".equals(cmd)) return handleBalances(sender, args);
         return true;
     }
 
@@ -92,14 +101,20 @@ public final class GlobalMoneyCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleBalance(Player player, String[] args) {
-        UUID targetId = player.getUniqueId();
+    private boolean handleBalance(CommandSender player, String[] args) {
+        UUID targetId;
         if (args.length >= 1) {
             if (!player.hasPermission("village.admin")) {
                 msg(player, "&cKeine Berechtigung.");
                 return true;
             }
             targetId = Bukkit.getOfflinePlayer(args[0]).getUniqueId();
+        } else {
+            if (!(player instanceof Player p)) {
+                msg(player, "&cBitte einen Spieler angeben: /balance <Spieler>");
+                return true;
+            }
+            targetId = p.getUniqueId();
         }
         final UUID balanceTargetId = targetId;
         double bal = currencyService.getBalance(balanceTargetId, currencyService.getGlobalCurrencyId());
@@ -107,8 +122,8 @@ public final class GlobalMoneyCommand implements CommandExecutor, TabCompleter {
         msg(player, "&7Globales Guthaben von &e" + (name != null ? name : balanceTargetId) + "&7: &a" + fmt(bal));
 
         Set<UUID> shownVillageIds = new HashSet<>();
-        if (balanceTargetId.equals(player.getUniqueId())) {
-            villageManager.getVillageAtLocation(player.getLocation()).ifPresent(village -> {
+        if (player instanceof Player p && balanceTargetId.equals(p.getUniqueId())) {
+            villageManager.getVillageAtLocation(p.getLocation()).ifPresent(village -> {
                 String currencyId = currencyService.getVillageCurrencyId(village);
                 double villageBalance = currencyService.getBalance(balanceTargetId, currencyId);
                 String currencyName = currencyService.getVillageCurrencyDisplayName(village);
@@ -128,7 +143,7 @@ public final class GlobalMoneyCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleBalances(Player player, String[] args) {
+    private boolean handleBalances(CommandSender player, String[] args) {
         if (!player.hasPermission("village.admin")) {
             msg(player, "&cKeine Berechtigung.");
             return true;
@@ -142,10 +157,10 @@ public final class GlobalMoneyCommand implements CommandExecutor, TabCompleter {
     }
 
     private String fmt(double value) {
-        return String.format(java.util.Locale.US, "%.2f", value);
+        return vaultHook.format(value);
     }
 
-    private void msg(Player p, String m) {
+    private void msg(CommandSender p, String m) {
         MessageUtil.send(p, config.getPrefix(), m);
     }
 

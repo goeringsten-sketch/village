@@ -1,0 +1,2 @@
+# Standard-Schematic: Barracks
+# Erstelle diese Datei mit WorldEdit: //schem save barracks.schem

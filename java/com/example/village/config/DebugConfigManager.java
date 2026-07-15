@@ -17,7 +17,7 @@ public final class DebugConfigManager {
 
     public void load() {
         File file = new File(plugin.getDataFolder(), "config/debug.yml");
-        if (!file.exists() && plugin.shouldUseBundledResources()) {
+        if (!file.exists()) {
             plugin.saveResource("config/debug.yml", false);
         }
         config = YamlConfiguration.loadConfiguration(file);

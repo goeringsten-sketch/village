@@ -1,0 +1,2 @@
+# Standard-Schematic: Farm
+# Erstelle diese Datei mit WorldEdit: //schem save farm.schem

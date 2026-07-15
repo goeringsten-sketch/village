@@ -8,6 +8,7 @@ import com.example.village.model.VillagerJob;
 import com.example.village.model.VillagerState;
 import net.citizensnpcs.api.npc.NPC;
 import org.bukkit.Location;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
@@ -56,6 +57,7 @@ public class VillagerManager {
         // 3. CustomVillager erstellen
         UUID villagerId = UUID.randomUUID();
         CustomVillager villager = new CustomVillager(villagerId, villagerName, job);
+        initializeNutrientState(villager);
         villager.setParentVillageId(village.getId());
         villager.recruit();
         villager.setState(VillagerState.IDLE);
@@ -77,6 +79,9 @@ public class VillagerManager {
 
         // 7. Event/Nachricht
         plugin.getLogger().info("Villager " + villagerName + " wurde in " + village.getName() + " rekrutiert!");
+        if (plugin.getQuestManager() != null) {
+            plugin.getQuestManager().recordRecruitment(player);
+        }
 
         return villager;
     }
@@ -84,6 +89,18 @@ public class VillagerManager {
     /**
      * Erstellt einen Citizens NPC
      */
+    private void initializeNutrientState(CustomVillager villager) {
+        ConfigurationSection nutrients = plugin.getVillageConfigManager().getVillagerNutrientsSection();
+        if (nutrients == null || nutrients.getKeys(false).isEmpty()) {
+            return;
+        }
+        int capacity = plugin.getVillageConfigManager().getVillagerNutrientStorageCapacity();
+        for (String nutrientKey : nutrients.getKeys(false)) {
+            villager.setNutrientCapacity(nutrientKey, capacity);
+            villager.setNutrientLevel(nutrientKey, capacity);
+        }
+    }
+
     private int createCitizensNpc(CustomVillager villager, Location location) {
         return citizensHook.spawnNpc(villager, location);
     }

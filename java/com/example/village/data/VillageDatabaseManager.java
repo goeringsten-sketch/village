@@ -11,6 +11,7 @@ import com.example.village.model.VillageRelationState;
 import com.example.village.model.VillageRelationType;
 import com.example.village.model.VillageMember;
 import com.example.village.model.VillageRole;
+import com.example.village.model.VillagerContract;
 import com.example.village.model.VillagerJob;
 import com.example.village.model.VillagerNeed;
 import com.example.village.model.VillagerSkill;
@@ -109,6 +110,8 @@ public final class VillageDatabaseManager {
         village.setLevel(cfg.getInt("level", 1));
         village.setPoints(cfg.getInt("points", 0));
         village.setFoundedAt(cfg.getLong("founded-at", System.currentTimeMillis()));
+        village.setReviveUses(cfg.getInt("revival.uses", 0));
+        village.setLastReviveAt(cfg.getLong("revival.last-at", 0L));
 
         // Borders (supports multiple border regions)
         ConfigurationSection bordersSection = cfg.getConfigurationSection("borders");
@@ -219,6 +222,9 @@ public final class VillageDatabaseManager {
                 if (bs.contains("schematic")) {
                     building.setSchematicName(bs.getString("schematic"));
                 }
+                if (bs.contains("aesthetic-score")) {
+                    building.setAestheticScore(bs.getInt("aesthetic-score", -1));
+                }
                 village.addBuilding(building);
             }
             fixBuildingTypeOrdinals(village);
@@ -238,6 +244,13 @@ public final class VillageDatabaseManager {
                 villager.setXp(vs.getDouble("xp", 0));
                 villager.setWallet(vs.getDouble("wallet", 0));
                 villager.setLastProductionTime(vs.getLong("last-production", System.currentTimeMillis()));
+                villager.setProductionPaused(vs.getBoolean("production-paused", false));
+                if (vs.contains("preferred-product")) {
+                    Material preferred = Material.matchMaterial(vs.getString("preferred-product", ""));
+                    if (preferred != null) {
+                        villager.setPreferredProduct(preferred);
+                    }
+                }
 
                 // Inventory
                 ConfigurationSection invSection = vs.getConfigurationSection("inventory");
@@ -256,6 +269,17 @@ public final class VillageDatabaseManager {
                     for (VillagerNeed need : VillagerNeed.values()) {
                         villager.setNeedValue(need,
                                 needsSection.getDouble(need.name().toLowerCase(), 100));
+                    }
+                }
+
+                ConfigurationSection nutrientsSection = vs.getConfigurationSection("nutrients");
+                if (nutrientsSection != null) {
+                    ConfigurationSection capacitiesSection = vs.getConfigurationSection("nutrient-capacities");
+                    for (String nutrientKey : nutrientsSection.getKeys(false)) {
+                        villager.setNutrientLevel(nutrientKey, nutrientsSection.getDouble(nutrientKey));
+                        if (capacitiesSection != null && capacitiesSection.contains(nutrientKey)) {
+                            villager.setNutrientCapacity(nutrientKey, capacitiesSection.getDouble(nutrientKey));
+                        }
                     }
                 }
 
@@ -282,6 +306,43 @@ public final class VillageDatabaseManager {
                 }
 
                 village.addVillager(villager);
+            }
+        }
+
+        ConfigurationSection contractsSection = cfg.getConfigurationSection("contracts");
+        if (contractsSection != null) {
+            for (String key : contractsSection.getKeys(false)) {
+                ConfigurationSection cs = contractsSection.getConfigurationSection(key);
+                if (cs == null) continue;
+                try {
+                    VillagerContract contract = new VillagerContract(
+                            UUID.fromString(key),
+                            parseContractType(cs.getString("type", "PRODUCTION")),
+                            uuidOrNull(cs.getString("requester")),
+                            uuidOrNull(cs.getString("supplier")),
+                            cs.getString("material"),
+                            cs.getInt("amount", 1),
+                            cs.getLong("created-at", System.currentTimeMillis()),
+                            cs.getLong("deadline-at", 0L),
+                            cs.getString("note", ""),
+                            parseContractStatus(cs.getString("status", "OPEN"))
+                    );
+                    village.addContract(contract);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+
+        ConfigurationSection deadSection = cfg.getConfigurationSection("last-dead-villager");
+        if (deadSection != null && deadSection.contains("id")) {
+            try {
+                UUID deadId = UUID.fromString(deadSection.getString("id"));
+                CustomVillager deadVillager = new CustomVillager(deadId,
+                        deadSection.getString("name", "Dorfbewohner"),
+                        parseVillagerJob(deadSection.getString("profession", "storage")));
+                deadVillager.setLevel(deadSection.getInt("level", 1));
+                village.setLastDeadVillager(deadVillager);
+            } catch (IllegalArgumentException ignored) {
             }
         }
 
@@ -492,6 +553,9 @@ public final class VillageDatabaseManager {
                 cfg.set(path + ".sign.y", building.getSignLocation().getBlockY());
                 cfg.set(path + ".sign.z", building.getSignLocation().getBlockZ());
             }
+            if (building.hasAestheticScore()) {
+                cfg.set(path + ".aesthetic-score", building.getAestheticScore());
+            }
         }
 
         // Villagers
@@ -503,6 +567,10 @@ public final class VillageDatabaseManager {
             cfg.set(path + ".xp", villager.getXp());
             cfg.set(path + ".wallet", villager.getWallet());
             cfg.set(path + ".last-production", villager.getLastProductionTime());
+            cfg.set(path + ".production-paused", villager.isProductionPaused());
+            if (villager.getPreferredProduct() != null) {
+                cfg.set(path + ".preferred-product", villager.getPreferredProduct().name());
+            }
 
             for (Map.Entry<Material, Integer> invEntry : villager.getInventory().entrySet()) {
                 cfg.set(path + ".inventory." + invEntry.getKey().name(), invEntry.getValue());
@@ -510,6 +578,12 @@ public final class VillageDatabaseManager {
 
             for (VillagerNeed need : VillagerNeed.values()) {
                 cfg.set(path + ".needs." + need.name().toLowerCase(), villager.getNeedValue(need));
+            }
+
+            for (Map.Entry<String, Double> nutrientEntry : villager.getNutrientLevels().entrySet()) {
+                cfg.set(path + ".nutrients." + nutrientEntry.getKey(), nutrientEntry.getValue());
+                cfg.set(path + ".nutrient-capacities." + nutrientEntry.getKey(),
+                        villager.getNutrientCapacity(nutrientEntry.getKey()));
             }
 
             for (Map.Entry<String, VillagerSkill> skillEntry : villager.getSkills().entrySet()) {
@@ -543,6 +617,27 @@ public final class VillageDatabaseManager {
             cfg.set("last-dead-villager.level", dead.getLevel());
         }
 
+        // Contracts
+        for (VillagerContract contract : village.getContracts()) {
+            String path = "contracts." + contract.getId();
+            cfg.set(path + ".type", contract.getType().name());
+            if (contract.getRequesterVillagerId() != null) {
+                cfg.set(path + ".requester", contract.getRequesterVillagerId().toString());
+            }
+            if (contract.getSupplierVillagerId() != null) {
+                cfg.set(path + ".supplier", contract.getSupplierVillagerId().toString());
+            }
+            cfg.set(path + ".material", contract.getMaterialKey());
+            cfg.set(path + ".amount", contract.getAmount());
+            cfg.set(path + ".created-at", contract.getCreatedAt());
+            cfg.set(path + ".deadline-at", contract.getDeadlineAt());
+            cfg.set(path + ".note", contract.getNote());
+            cfg.set(path + ".status", contract.getStatus().name());
+        }
+
+        cfg.set("revival.uses", village.getReviveUses());
+        cfg.set("revival.last-at", village.getLastReviveAt());
+
         // Relations
         for (VillageRelation relation : village.getRelations().values()) {
             String path = "relations." + relation.getOtherVillageId().toString();
@@ -574,12 +669,31 @@ public final class VillageDatabaseManager {
 
     // Utility methods
     private VillagerJob parseVillagerJob(String jobStr) {
-        if (jobStr == null) return VillagerJob.LABORER;
-        for (VillagerJob job : VillagerJob.values()) {
-            if (job.getWorkBuildingKey().equals(jobStr)) {
-                return job;
-            }
+        return VillagerJob.fromString(jobStr);
+    }
+
+    private VillagerContract.Type parseContractType(String value) {
+        try {
+            return VillagerContract.Type.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+        } catch (Exception e) {
+            return VillagerContract.Type.PRODUCTION;
         }
-        return VillagerJob.LABORER; // Default fallback
+    }
+
+    private VillagerContract.Status parseContractStatus(String value) {
+        try {
+            return VillagerContract.Status.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+        } catch (Exception e) {
+            return VillagerContract.Status.OPEN;
+        }
+    }
+
+    private UUID uuidOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

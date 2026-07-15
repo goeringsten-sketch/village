@@ -277,23 +277,33 @@ public final class VillageLightService {
             return 15;
         }
 
-        int maxLightLevel = lightConfigManager.getDefaultMaxLightLevel();
-        List<Village> lightGroup = buildLightGroup(player);
-        maxLightLevel = Math.max(maxLightLevel, getTargetLightLevelForGroup(worldName, blockX, blockZ, lightGroup));
+        int undergroundMaxY = lightConfigManager.getUndergroundMaxLevel();
+        boolean isUnderground = undergroundMaxY != -999 && blockY < undergroundMaxY;
 
+        int maxLightLevel = lightConfigManager.getDefaultMaxLightLevel();
+
+        if (!isUnderground) {
+            // 2D-Quellen (Dorf, Wege, Regionen) nur oberhalb des Untergrunds
+            List<Village> lightGroup = buildLightGroup(player);
+            maxLightLevel = Math.max(maxLightLevel, getTargetLightLevelForGroup(worldName, blockX, blockZ, lightGroup));
+
+            for (LightRegionSource source : lightConfigManager.getRegionSources()) {
+                if (!worldName.equals(source.worldName())) continue;
+                maxLightLevel = Math.max(maxLightLevel, getRegionSourceLightLevel(player.getWorld(), source, blockX, blockZ));
+            }
+
+            for (LightPathSource source : lightConfigManager.getPathSources()) {
+                if (!worldName.equals(source.worldName())) continue;
+                maxLightLevel = Math.max(maxLightLevel, getPathSourceLightLevel(source, blockX, blockZ));
+            }
+        }
+
+        // 3D-Quellen (POIs mit Y-Koordinate) gelten immer
         for (LightPointSource source : lightConfigManager.getPointSources()) {
             if (!worldName.equals(source.worldName())) continue;
+            // Wenn underground: nur POIs mit expliziter Y-Koordinate berücksichtigen
+            if (isUnderground && Double.isNaN(source.y())) continue;
             maxLightLevel = Math.max(maxLightLevel, getPointSourceLightLevel(source, blockX, blockY, blockZ));
-        }
-
-        for (LightRegionSource source : lightConfigManager.getRegionSources()) {
-            if (!worldName.equals(source.worldName())) continue;
-            maxLightLevel = Math.max(maxLightLevel, getRegionSourceLightLevel(player.getWorld(), source, blockX, blockZ));
-        }
-
-        for (LightPathSource source : lightConfigManager.getPathSources()) {
-            if (!worldName.equals(source.worldName())) continue;
-            maxLightLevel = Math.max(maxLightLevel, getPathSourceLightLevel(source, blockX, blockZ));
         }
 
         return Math.max(0, Math.min(15, maxLightLevel));
@@ -509,7 +519,10 @@ public final class VillageLightService {
             return;
         }
 
-        int batchSize = lightConfigManager.getRefreshBatchSize();
+        // Adaptives Batch-Sizing: Bei vielen Spielern kleinere Batches senden
+        int onlinePlayers = Bukkit.getOnlinePlayers().size();
+        int baseBatchSize = lightConfigManager.getRefreshBatchSize();
+        int batchSize = Math.max(1, baseBatchSize - (onlinePlayers / 5));
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
             @Override
             public void run() {

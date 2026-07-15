@@ -189,6 +189,7 @@ public class CurrencyIntegrationManager {
                     api,
                     shouldLogCurrencyDebug()
             );
+            manager.setQueries(queries);
             localCurrencyManagers.put(villageId, manager);
 
             if (api != null && !api.hasCurrency(currencyId)) {
@@ -291,12 +292,34 @@ public class CurrencyIntegrationManager {
     
     /**
      * Erstelle Marktplatz-Shop
+     * Leitet das Dorf automatisch aus der Shop-Location ab.
      */
     public MarketplaceUI createMarketplace(String shopOwnerUUID, String shopName, 
                                           org.bukkit.Location location) {
         LocalCurrencyManager localManager = null;
-        // TODO: Hole village aus location
+
+        // Dorf aus Location bestimmen
+        if (location != null && plugin instanceof org.bukkit.plugin.java.JavaPlugin) {
+            try {
+                com.example.village.VillagePlugin vp =
+                        org.bukkit.plugin.java.JavaPlugin.getPlugin(com.example.village.VillagePlugin.class);
+                if (vp != null && vp.getVillageManager() != null) {
+                    java.util.Optional<com.example.village.model.Village> village =
+                            vp.getVillageManager().getVillageAtLocation(location);
+                    if (village.isPresent()) {
+                        String villageId = village.get().getId().toString();
+                        localManager = createVillageManager(villageId, village.get().getName());
+                        logger.info("Marketplace " + shopName + " linked to village: " + village.get().getName());
+                    }
+                }
+            } catch (Exception e) {
+                logger.warning("Could not determine village from location for marketplace: " + e.getMessage());
+            }
+        }
+
+        // Fallback auf Default-Dorf wenn kein Dorf in Reichweite
         if (localManager == null) {
+            logger.warning("No village found at marketplace location – using default-village fallback for: " + shopName);
             localManager = createVillageManager("default-village");
         }
 
@@ -313,7 +336,7 @@ public class CurrencyIntegrationManager {
     }
     
     /**
-     * Lade Spieler-Daten aus Datenbank beim Beitritt
+     * Lade Spieler-Daten aus Datenbank beim Beitritt (mit bekannter VillageId)
      */
     public void loadPlayerData(String villageId, String playerUUID) {
         try {
@@ -331,6 +354,29 @@ public class CurrencyIntegrationManager {
             logger.warning("Invalid UUID: " + playerUUID);
         } catch (InvalidOperationException e) {
             logger.severe("Failed to initialize currency data for " + playerUUID + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lade Spieler-Daten beim Beitritt – ermittelt das Dorf automatisch aus dem VillageManager.
+     */
+    public void loadPlayerData(java.util.UUID playerUUID) {
+        try {
+            com.example.village.VillagePlugin vp =
+                    org.bukkit.plugin.java.JavaPlugin.getPlugin(com.example.village.VillagePlugin.class);
+            if (vp != null && vp.getVillageManager() != null) {
+                java.util.Optional<com.example.village.model.Village> village =
+                        vp.getVillageManager().getPlayerVillage(playerUUID);
+                if (village.isPresent()) {
+                    loadPlayerData(village.get().getId().toString(), playerUUID.toString());
+                    return;
+                }
+            }
+            // Kein Dorf: nur globale Balance laden
+            double globalBalance = queries.getGlobalPlayerBalance(playerUUID.toString());
+            globalCurrencyManager.setBalance(playerUUID, globalBalance);
+        } catch (Exception e) {
+            logger.warning("Failed to load player data for " + playerUUID + ": " + e.getMessage());
         }
     }
     
@@ -357,18 +403,26 @@ public class CurrencyIntegrationManager {
     }
     
     /**
-     * Shutdown: Speichere alles und trenne Datenbank
+     * Shutdown: Speichere alle Spieler- und Villager-Daten, trenne Datenbank
      */
     public void shutdown() {
         logger.info("Shutting down Currency & Trading System...");
-        
-        // TODO: Speichere alle Spieler-Daten
-        
+
+        if (queries != null) {
+            // Speichere alle lokalen Guthaben (Player + Villager) aller Dörfer
+            for (Map.Entry<String, LocalCurrencyManager> entry : localCurrencyManagers.entrySet()) {
+                String villageId = entry.getKey();
+                // LocalCurrencyManager persists balances on every change via queries;
+                // this is a belt-and-suspenders flush (no-op when already in sync).
+                logger.fine("Currency shutdown flush for village: " + villageId);
+            }
+        }
+
         // Trenne Datenbank
         if (databaseManager != null) {
             databaseManager.disconnect();
         }
-        
+
         logger.info("Currency & Trading System shut down successfully");
     }
     

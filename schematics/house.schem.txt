@@ -1,0 +1,3 @@
+# Standard-Schematic: Wohnhaus
+# Erstelle diese Datei mit WorldEdit: //schem save house.schem
+# Ersetze diese Platzhalter-Datei mit der echten .schem Datei

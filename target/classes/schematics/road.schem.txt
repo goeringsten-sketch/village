@@ -1,0 +1,2 @@
+# Standard-Schematic: Road
+# Erstelle diese Datei mit WorldEdit: //schem save road.schem

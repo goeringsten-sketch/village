@@ -3,6 +3,7 @@ package com.example.village.currency;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.concurrent.ConcurrentHashMap;
+import com.example.village.data.CurrencyQueries;
 
 /**
  * Manager für lokale Dorf-Währung
@@ -22,8 +23,8 @@ public class LocalCurrencyManager implements CurrencyManager {
     private final Map<UUID, Double> playerBalances;
     private final Map<String, Double> villagerBalances;
     
-    // Datenbank-Backend (wird später implementiert)
-    // private final LocalCurrencyDatabase database;
+    // Datenbank-Backend
+    private CurrencyQueries queries;
     
     /**
      * Erstelle LocalCurrencyManager für ein Dorf
@@ -64,6 +65,13 @@ public class LocalCurrencyManager implements CurrencyManager {
                     " with currency: " + currencyName);
         }
     }
+
+    /**
+     * Setze das Queries Backend für Datenbank-Persistence
+     */
+    public void setQueries(CurrencyQueries queries) {
+        this.queries = queries;
+    }
     
     /**
      * Initialisiere einen Spieler mit Startguthaben
@@ -85,7 +93,9 @@ public class LocalCurrencyManager implements CurrencyManager {
         if (!playerBalances.containsKey(player)) {
             playerBalances.put(player, startingAmount);
             logger.fine("Initialized player " + player + " with " + startingAmount + " " + currencyName);
-            // TODO: Persistieren in Database
+            if (queries != null) {
+                queries.setPlayerBalance(villageUUID, player.toString(), startingAmount);
+            }
         }
     }
     
@@ -100,6 +110,9 @@ public class LocalCurrencyManager implements CurrencyManager {
         if (!villagerBalances.containsKey(villagerUUID)) {
             villagerBalances.put(villagerUUID, startingAmount);
             logger.fine("Initialized villager " + villagerUUID + " with " + startingAmount + " " + currencyName);
+            if (queries != null) {
+                queries.setVillagerBalance(villageUUID, villagerUUID, startingAmount);
+            }
         }
     }
     
@@ -137,7 +150,9 @@ public class LocalCurrencyManager implements CurrencyManager {
 
         playerBalances.merge(player, amount, Double::sum);
         logger.finest("Added " + amount + " " + currencyName + " to player " + player);
-        // TODO: Persistieren in Database
+        if (queries != null) {
+            queries.setPlayerBalance(villageUUID, player.toString(), getBalance(player));
+        }
     }
     
     /**
@@ -150,6 +165,9 @@ public class LocalCurrencyManager implements CurrencyManager {
         
         villagerBalances.merge(villagerUUID, amount, Double::sum);
         logger.finest("Added " + amount + " " + currencyName + " to villager " + villagerUUID);
+        if (queries != null) {
+            queries.setVillagerBalance(villageUUID, villagerUUID, getVillagerBalance(villagerUUID));
+        }
     }
     
     /**
@@ -176,6 +194,9 @@ public class LocalCurrencyManager implements CurrencyManager {
 
         playerBalances.merge(player, -amount, Double::sum);
         logger.finest("Removed " + amount + " " + currencyName + " from player " + player);
+        if (queries != null) {
+            queries.setPlayerBalance(villageUUID, player.toString(), getBalance(player));
+        }
     }
     
     /**
@@ -196,6 +217,9 @@ public class LocalCurrencyManager implements CurrencyManager {
         
         villagerBalances.merge(villagerUUID, -amount, Double::sum);
         logger.finest("Removed " + amount + " " + currencyName + " from villager " + villagerUUID);
+        if (queries != null) {
+            queries.setVillagerBalance(villageUUID, villagerUUID, getVillagerBalance(villagerUUID));
+        }
     }
     
     /**

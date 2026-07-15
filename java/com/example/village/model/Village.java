@@ -26,11 +26,14 @@ public final class Village {
     private final Map<UUID, VillageRelation> relations;
     private final List<VillageBuilding> buildings;
     private final List<CustomVillager> villagers;
+    private final List<VillagerContract> contracts;
     private final Map<String, Integer> upgrades;
     private final java.util.Set<UUID> knownVillageIds;
     private long foundedAt;
     private int maxBuildRadius;
     private CustomVillager lastDeadVillager;
+    private int reviveUses;
+    private long lastReviveAt;
 
     public Village(UUID id, String name, UUID founderId, Location bellLocation) {
         this.id = id;
@@ -49,10 +52,13 @@ public final class Village {
         this.relations = new HashMap<>();
         this.buildings = new ArrayList<>();
         this.villagers = new ArrayList<>();
+        this.contracts = new ArrayList<>();
         this.upgrades = new HashMap<>();
         this.knownVillageIds = new java.util.HashSet<>();
         this.maxBuildRadius = 50; // Default wird aus Config überschrieben
         this.foundedAt = System.currentTimeMillis();
+        this.reviveUses = 0;
+        this.lastReviveAt = 0L;
 
         members.put(founderId, new VillageMember(founderId, VillageRole.FOUNDER));
     }
@@ -314,6 +320,29 @@ public final class Village {
         villagers.removeIf(v -> v.getId().equals(villagerId));
     }
 
+    public List<VillagerContract> getContracts() {
+        return contracts;
+    }
+
+    public void addContract(VillagerContract contract) {
+        if (contract != null) {
+            contracts.add(contract);
+        }
+    }
+
+    public void removeContract(UUID contractId) {
+        contracts.removeIf(c -> c.getId().equals(contractId));
+    }
+
+    public VillagerContract getContract(UUID contractId) {
+        for (VillagerContract contract : contracts) {
+            if (contract.getId().equals(contractId)) {
+                return contract;
+            }
+        }
+        return null;
+    }
+
     public Map<String, Integer> getUpgrades() { return upgrades; }
 
     public java.util.Set<UUID> getKnownVillageIds() {
@@ -392,5 +421,25 @@ public final class Village {
 
     public void setLastDeadVillager(CustomVillager villager) {
         this.lastDeadVillager = villager;
+    }
+
+    public int getReviveUses() {
+        return reviveUses;
+    }
+
+    public void setReviveUses(int reviveUses) {
+        this.reviveUses = Math.max(0, reviveUses);
+    }
+
+    public void incrementReviveUses() {
+        this.reviveUses = Math.max(0, this.reviveUses + 1);
+    }
+
+    public long getLastReviveAt() {
+        return lastReviveAt;
+    }
+
+    public void setLastReviveAt(long lastReviveAt) {
+        this.lastReviveAt = Math.max(0L, lastReviveAt);
     }
 }

@@ -127,6 +127,8 @@ public final class BuildingInteractListener implements Listener {
     @EventHandler
     public void onPendingPlacementModeClick(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        // Minecraft fires PlayerInteractEvent twice (main hand + off-hand) — only process main hand
+        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
 
         Player player = event.getPlayer();
         BuildingService.PendingPlacementMode mode = buildingService.getPendingPlacementMode(player.getUniqueId());
@@ -181,6 +183,7 @@ public final class BuildingInteractListener implements Listener {
                 case BUILDING_TOO_FAR -> failureMessage = "&cDas Gebäude liegt außerhalb der maximalen Bauentfernung.";
                 case ON_START_BORDER -> failureMessage = "&cDas Gebäude darf nicht auf dem Dorfbrunnen oder an einer bestehenden Grenze platziert werden.";
                 case PARTIAL_OUTSIDE_BORDER -> failureMessage = "&cDas Gebäude befindet sich teilweise auf einer bestehenden Dorfgrenze.";
+                case BORDER_EXPANSION_NEEDED -> failureMessage = "&cFür diesen Platz muss die Dorfgrenze zuerst erweitert werden.";
                 case OVERLAPS_BUILDING -> {
                     String diag = buildingService.getLastPlacementDiagnostic(player.getUniqueId());
                     failureMessage = "&cDas Gebäude überschneidet sich mit einem bestehenden Gebäude oder Bauplatz.";
@@ -191,11 +194,15 @@ public final class BuildingInteractListener implements Listener {
                 case INSIDE_DEFAULT_BORDER -> failureMessage = "&cDas Gebäude darf nicht vollständig in der Standard-Grenze (ID 0) liegen, wenn bereits Erweiterungen existieren.";
                 case BLOCK_CHECK_VALIDATION_FAILED -> failureMessage = "&cDie Bauteilprüfung ist fehlgeschlagen. Bitte überprüfe den Bereich und versuche es erneut.";
                 case SCHEMATIC_NOT_FOUND -> failureMessage = "&cSchematic nicht gefunden oder ungültig. Bitte wähle eine vorhandene Schematic aus.";
-                case LEVEL_TOO_LOW -> failureMessage = "&cDas Dorflevel ist zu niedrig für dieses Gebäude.";
+                case LEVEL_TOO_LOW -> failureMessage = configManager.message("building-village-level-too-low");
                 case ALREADY_BUILDING -> failureMessage = "&cDu hast bereits eine laufende Gebäudeplatzierung.";
+                case TOO_MANY_INSTANCES -> failureMessage = configManager.message("building-max-instances-reached");
                 default -> failureMessage = "&cVorschau konnte nicht angezeigt werden. Versuche einen anderen Block.";
             }
-            MessageUtil.send(player, configManager.getPrefix(), failureMessage);
+            // Show error with an [ABBRECHEN] button so the player can cancel without waiting
+            MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                    failureMessage + " &8[&c&lABBRECHEN&8]",
+                    "/village cancel");
             return;
         }
 
@@ -211,4 +218,3 @@ public final class BuildingInteractListener implements Listener {
 
     // NOTE: Confirmation is handled via chat input ("ja"/"abbrechen") in ChatInputListener.
 }
-

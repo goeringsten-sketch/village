@@ -3,6 +3,7 @@ package com.example.village.gui;
 import com.example.village.model.CustomVillager;
 import com.example.village.model.Village;
 import com.example.village.util.ItemBuilder;
+import com.example.village.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -49,7 +50,8 @@ public class VillagerInventoryGui implements InventoryHolder {
         int size = Math.max(54, Math.min(54, storageSize + 9));
 
         inventory = Bukkit.createInventory(this, size,
-                "§b" + villager.getName() + " - Inventar");
+                MessageUtil.text("ui.villager-inventory.title-prefix", "§b") + villager.getName()
+                        + MessageUtil.text("ui.villager-inventory.title-suffix", " - Inventar"));
 
         // Zeige Items
         int slot = 0;
@@ -59,11 +61,11 @@ public class VillagerInventoryGui implements InventoryHolder {
             ItemStack item = new ItemStack(entry.getKey(), Math.min(64, entry.getValue()));
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName("§f" + entry.getKey().name());
+                meta.setDisplayName(MessageUtil.text("ui.villager-inventory.item-prefix", "§f") + entry.getKey().name());
                 meta.setLore(Arrays.asList(
-                        "§7Menge: §e" + entry.getValue(),
-                        "§7Linksklick: Entnehmen",
-                        "§7Rechtsklick: Entnehmen (1)"
+                        MessageUtil.text("ui.villager-inventory.amount", "§7Menge: §e") + entry.getValue(),
+                        MessageUtil.text("ui.villager-inventory.left-click", "§7Linksklick: Entnehmen"),
+                        MessageUtil.text("ui.villager-inventory.right-click", "§7Rechtsklick: Entnehmen (1)")
                 ));
                 item.setItemMeta(meta);
             }
@@ -75,7 +77,7 @@ public class VillagerInventoryGui implements InventoryHolder {
             ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
             ItemMeta meta = pane.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName("§8Freier Speicherplatz");
+                meta.setDisplayName(MessageUtil.text("ui.villager-inventory.free-slot", "§8Freier Speicherplatz"));
                 pane.setItemMeta(meta);
             }
             inventory.setItem(i, pane);
@@ -85,10 +87,10 @@ public class VillagerInventoryGui implements InventoryHolder {
             ItemStack locked = new ItemStack(Material.BARRIER);
             ItemMeta meta = locked.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName("§cGesperrter Slot");
+                meta.setDisplayName(MessageUtil.text("ui.villager-inventory.locked-slot", "§cGesperrter Slot"));
                 meta.setLore(Arrays.asList(
-                        "§7Dorf-Upgrade erforderlich",
-                        "§7Upgrade-Key: §evillager-storage"
+                        MessageUtil.text("ui.villager-inventory.upgrade-required", "§7Dorf-Upgrade erforderlich"),
+                        MessageUtil.text("ui.villager-inventory.upgrade-key", "§7Upgrade-Key: §evillager-storage")
                 ));
                 locked.setItemMeta(meta);
             }
@@ -98,21 +100,22 @@ public class VillagerInventoryGui implements InventoryHolder {
         // Info-Slot
         inventory.setItem(SLOT_INFO, createInfoItem());
         inventory.setItem(SLOT_DEPOSIT_STACK, new ItemBuilder(Material.CHEST)
-                .name("§aStack einlagern")
-                .lore("§7Linksklick: Mainhand-Stack einlagern")
+                .name(MessageUtil.text("ui.villager-inventory.deposit-stack", "§aStack einlagern"))
+                .lore(MessageUtil.text("ui.villager-inventory.deposit-stack-lore", "§7Linksklick: Mainhand-Stack einlagern"))
                 .build());
         inventory.setItem(SLOT_DEPOSIT_ONE, new ItemBuilder(Material.HOPPER)
-                .name("§a1 Item einlagern")
-                .lore("§7Linksklick: 1x Mainhand einlagern")
+                .name(MessageUtil.text("ui.villager-inventory.deposit-one", "§a1 Item einlagern"))
+                .lore(MessageUtil.text("ui.villager-inventory.deposit-one-lore", "§7Linksklick: 1x Mainhand einlagern"))
                 .build());
         inventory.setItem(SLOT_UPGRADE, new ItemBuilder(Material.ANVIL)
-                .name("§eLager aufwerten")
-                .lore("§7Erhoeht Slots in 9er-Schritten", "§7Nur Gruender/Admin")
+                .name(MessageUtil.text("ui.villager-inventory.upgrade", "§eLager aufwerten"))
+                .lore(MessageUtil.text("ui.villager-inventory.upgrade-lore-1", "§7Erhoeht Slots in 9er-Schritten"),
+                        MessageUtil.text("ui.villager-inventory.upgrade-lore-2", "§7Nur Gruender/Admin"))
                 .build());
 
         // Zurück-Button
         inventory.setItem(SLOT_BACK, new ItemBuilder(Material.ARROW)
-                .name("§7Zurück")
+                .name(MessageUtil.text("ui.generic.back", "§7Zurück"))
                 .build());
         inventory.setItem(SLOT_PERMISSIONS, createPermissionItem());
 
@@ -128,14 +131,14 @@ public class VillagerInventoryGui implements InventoryHolder {
         ItemStack item = new ItemStack(Material.BOOK);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§6Inventar-Info");
+            meta.setDisplayName(MessageUtil.text("ui.villager-inventory.info", "§6Inventar-Info"));
             meta.setLore(Arrays.asList(
-                    "§7Villager: §e" + villager.getName(),
-                    "§7Belegte Slots: §e" + countUsedSlots() + "/" + maxSlots,
-                    "§7",
-                    "§7Linksklick: Entnehmen (Stack)",
-                    "§7Rechtsklick: Entnehmen (1)",
-                    "§7Mainhand kann eingelagert werden"
+                    MessageUtil.text("ui.villager-inventory.villager", "§7Villager: §e") + villager.getName(),
+                    MessageUtil.text("ui.villager-inventory.used-slots", "§7Belegte Slots: §e") + countUsedSlots() + "/" + maxSlots,
+                    MessageUtil.text("ui.generic.empty", "§7"),
+                    MessageUtil.text("ui.villager-inventory.left-click-stack", "§7Linksklick: Entnehmen (Stack)"),
+                    MessageUtil.text("ui.villager-inventory.right-click-one", "§7Rechtsklick: Entnehmen (1)"),
+                    MessageUtil.text("ui.villager-inventory.mainhand", "§7Mainhand kann eingelagert werden")
             ));
             item.setItemMeta(meta);
         }
@@ -146,10 +149,10 @@ public class VillagerInventoryGui implements InventoryHolder {
         ItemStack item = new ItemStack(Material.WRITABLE_BOOK);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§bZugriffsrechte");
+            meta.setDisplayName(MessageUtil.text("ui.villager-inventory.permissions", "§bZugriffsrechte"));
             meta.setLore(Arrays.asList(
-                    "§7Entnehmen/Einlagern: §eGruender, Haendler, Admin",
-                    "§7Upgrades: §eGruender, Admin"
+                    MessageUtil.text("ui.villager-inventory.permissions-1", "§7Entnehmen/Einlagern: §eGruender, Haendler, Admin"),
+                    MessageUtil.text("ui.villager-inventory.permissions-2", "§7Upgrades: §eGruender, Admin")
             ));
             item.setItemMeta(meta);
         }

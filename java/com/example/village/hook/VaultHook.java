@@ -1,6 +1,7 @@
 package com.example.village.hook;
 
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
 
@@ -35,6 +36,13 @@ public final class VaultHook {
                 Method nameMethod = economyClass.getMethod("getName");
                 Object name = nameMethod.invoke(economy);
                 logger.info("Vault-Integration aktiviert (" + name + ").");
+                try {
+                    Method formatMethod = economyClass.getMethod("format", double.class);
+                    String formattedSample = (String) formatMethod.invoke(economy, 100.0);
+                    logger.info("[Vault] Globale Waehrung importiert. Format-Beispiel (100.0): " + formattedSample);
+                } catch (Exception e) {
+                    // ignore
+                }
             }
         } catch (ClassNotFoundException e) {
             logger.info("Vault API nicht verfügbar zur Compilezeit; Integration bleibt deaktiviert.");
@@ -49,30 +57,30 @@ public final class VaultHook {
         return available && economy != null;
     }
 
-    public double getBalance(Player player) {
+    public double getBalance(OfflinePlayer player) {
         if (!isAvailable()) return 0;
         try {
-            Method method = economyClass.getMethod("getBalance", Player.class);
+            Method method = economyClass.getMethod("getBalance", OfflinePlayer.class);
             return (double) method.invoke(economy, player);
         } catch (Exception e) {
             return 0;
         }
     }
 
-    public boolean has(Player player, double amount) {
+    public boolean has(OfflinePlayer player, double amount) {
         if (!isAvailable()) return true;
         try {
-            Method method = economyClass.getMethod("has", Player.class, double.class);
+            Method method = economyClass.getMethod("has", OfflinePlayer.class, double.class);
             return (boolean) method.invoke(economy, player, amount);
         } catch (Exception e) {
             return true;
         }
     }
 
-    public boolean withdraw(Player player, double amount) {
+    public boolean withdraw(OfflinePlayer player, double amount) {
         if (!isAvailable()) return true;
         try {
-            Method method = economyClass.getMethod("withdrawPlayer", Player.class, double.class);
+            Method method = economyClass.getMethod("withdrawPlayer", OfflinePlayer.class, double.class);
             Object response = method.invoke(economy, player, amount);
             Method successMethod = response.getClass().getMethod("transactionSuccess");
             return (boolean) successMethod.invoke(response);
@@ -81,10 +89,10 @@ public final class VaultHook {
         }
     }
 
-    public boolean deposit(Player player, double amount) {
+    public boolean deposit(OfflinePlayer player, double amount) {
         if (!isAvailable()) return true;
         try {
-            Method method = economyClass.getMethod("depositPlayer", Player.class, double.class);
+            Method method = economyClass.getMethod("depositPlayer", OfflinePlayer.class, double.class);
             Object response = method.invoke(economy, player, amount);
             Method successMethod = response.getClass().getMethod("transactionSuccess");
             return (boolean) successMethod.invoke(response);

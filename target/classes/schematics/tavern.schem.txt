@@ -1,0 +1,2 @@
+# Standard-Schematic: Tavern
+# Erstelle diese Datei mit WorldEdit: //schem save tavern.schem

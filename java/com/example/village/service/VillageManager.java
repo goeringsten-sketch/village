@@ -94,6 +94,14 @@ public final class VillageManager {
         VillageBorder border = VillageBorder.createSquare(bellLocation, initialSize, heightAbove, heightBelow);
         village.setBorder(border);
 
+        // Auto-register Dorfzentrum as the founding building (completed, no sign yet)
+        VillageBuilding centerBuilding = new VillageBuilding(UUID.randomUUID(), "dorfzentrum", bellLocation);
+        centerBuilding.setCompleted(true);
+        centerBuilding.setOwnerId(founder.getUniqueId());
+        centerBuilding.setDirection("N");
+        centerBuilding.setTypeOrdinal(1);
+        village.addBuilding(centerBuilding);
+
         databaseManager.addVillage(village);
         if (currencyService != null) {
             currencyService.ensureVillageCurrency(village);
@@ -112,6 +120,11 @@ public final class VillageManager {
             Village village = villageOpt.get();
             if (currencyService != null) {
                 currencyService.deleteVillageCurrency(village);
+            }
+            // Convert all villagers back to plain vanilla before removing data
+            com.example.village.service.VillagerService vs = plugin.getVillagerService();
+            if (vs != null) {
+                vs.releaseVillagersOnDelete(village);
             }
             // Remove all buildings
             if (buildingService != null) {

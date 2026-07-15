@@ -1,0 +1,117 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< com.example:village >-------------------------
+[INFO] Building Village 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ village ---
+[INFO] Deleting /workspaces/village/target
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ village ---
+[INFO] Copying 20 resources from resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ village ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 74 source files with javac [debug target 21] to target/classes
+[INFO] /workspaces/village/java/com/example/village/VillagePlugin.java: Some input files use or override a deprecated API.
+[INFO] /workspaces/village/java/com/example/village/VillagePlugin.java: Recompile with -Xlint:deprecation for details.
+[INFO] Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+[INFO] -------------------------------------------------------------
+[WARNING] COMPILATION WARNING : 
+[INFO] -------------------------------------------------------------
+[WARNING] location of system modules is not set in conjunction with -source 21
+  not setting the location of system modules may lead to class files that cannot run on JDK 21
+    --release 21 is recommended instead of -source 21 -target 21 because it sets the location of system modules automatically
+[INFO] 1 warning
+[INFO] -------------------------------------------------------------
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /workspaces/village/java/com/example/village/service/SkillTreeManager.java:[16,19] cannot find symbol
+  symbol:   class VaultHook
+  location: class com.example.village.service.SkillTreeManager
+[ERROR] /workspaces/village/java/com/example/village/service/SkillTreeManager.java:[18,51] cannot find symbol
+  symbol:   class VaultHook
+  location: class com.example.village.service.SkillTreeManager
+[ERROR] /workspaces/village/java/com/example/village/data/VillageDatabaseManager.java:[189,37] incompatible types: java.lang.String cannot be converted to com.example.village.model.VillagerJob
+[ERROR] /workspaces/village/java/com/example/village/data/VillageDatabaseManager.java:[219,33] cannot find symbol
+  symbol:   method setSkillLevel(java.lang.String,int)
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/data/VillageDatabaseManager.java:[353,51] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/data/VillageDatabaseManager.java:[367,87] incompatible types: java.util.Map.Entry<java.lang.String,com.example.village.model.VillagerSkill> cannot be converted to java.util.Map.Entry<java.lang.String,java.lang.Integer>
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerService.java:[62,77] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerService.java:[202,64] incompatible types: java.lang.String cannot be converted to com.example.village.model.VillagerJob
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerService.java:[275,17] cannot find symbol
+  symbol:   method setProfessionKey(java.lang.String)
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerService.java:[295,17] cannot find symbol
+  symbol:   method setProfessionKey(java.lang.String)
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/gui/GuiManager.java:[480,81] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/gui/GuiManager.java:[482,90] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/gui/GuiManager.java:[589,77] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/gui/GuiManager.java:[643,77] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/gui/GuiManager.java:[681,48] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[52,49] cannot find symbol
+  symbol:   variable ENERGY
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[58,47] cannot find symbol
+  symbol:   variable HEALTH
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[107,50] cannot find symbol
+  symbol:   variable HEALTH
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[141,70] cannot find symbol
+  symbol:   variable ENERGY
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[142,47] cannot find symbol
+  symbol:   variable ENERGY
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[162,66] cannot find symbol
+  symbol:   variable HEALTH
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/StateEngine.java:[163,43] cannot find symbol
+  symbol:   variable HEALTH
+  location: class com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerManager.java:[48,20] cannot find symbol
+  symbol:   method getVillagePoints()
+  location: variable village of type com.example.village.model.Village
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerManager.java:[76,41] cannot find symbol
+  symbol:   method getVillagePoints()
+  location: variable village of type com.example.village.model.Village
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerManager.java:[89,35] cannot find symbol
+  symbol:   method createNpc(java.lang.String,org.bukkit.entity.EntityType,org.bukkit.Location)
+  location: variable citizensHook of type com.example.village.hook.CitizensHook
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerManager.java:[126,52] incompatible types: java.util.Optional<com.example.village.model.Village> cannot be converted to com.example.village.model.Village
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerManager.java:[147,31] cannot find symbol
+  symbol:   method getType()
+  location: variable b of type com.example.village.model.VillageBuilding
+[ERROR] /workspaces/village/java/com/example/village/service/VillagerTickService.java:[30,79] incompatible types: int cannot be converted to org.bukkit.scheduler.BukkitTask
+[ERROR] /workspaces/village/java/com/example/village/service/QuestManager.java:[108,22] cannot find symbol
+  symbol:   method setRewardItems(java.util.HashMap<java.lang.String,java.lang.Integer>)
+  location: variable questInstance of type com.example.village.model.Quest
+[ERROR] /workspaces/village/java/com/example/village/service/QuestManager.java:[146,41] cannot find symbol
+  symbol:   method getVillagePoints()
+  location: variable village of type com.example.village.model.Village
+[ERROR] /workspaces/village/java/com/example/village/listener/GuiClickListener.java:[758,44] cannot find symbol
+  symbol:   method getProfessionKey()
+  location: variable villager of type com.example.village.model.CustomVillager
+[ERROR] /workspaces/village/java/com/example/village/model/CustomVillager.java:[123,32] cannot find symbol
+  symbol:   method getDecayRate()
+  location: variable need of type com.example.village.model.VillagerNeed
+[ERROR] /workspaces/village/java/com/example/village/command/VillagerCommand.java:[82,58] incompatible types: java.util.Optional<com.example.village.model.Village> cannot be converted to com.example.village.model.Village

@@ -1,0 +1,4 @@
+{
+  "summary":  "Python script fixed by using a safe and precise split at '\\ncategories:\\n' to prevent matching menu_categories.",
+  "updatedAt":  "2026-07-01T18:51:10.897347300Z"
+}

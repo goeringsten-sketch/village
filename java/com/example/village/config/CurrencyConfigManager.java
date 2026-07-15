@@ -148,7 +148,7 @@ public class CurrencyConfigManager {
     public List<String> getTradingJobs() {
         List<String> jobs = config.getStringList("villages.default.tradersJobs");
         if (jobs.isEmpty()) {
-            jobs = List.of("FARMER", "MERCHANT", "SHEPHERD", "LIBRARIAN");
+            jobs = List.of("FARMER", "MERCHANT", "BLACKSMITH", "SCHOLAR", "CARTOGRAPHER", "BAKER", "MINER", "LUMBERJACK", "CARPENTER", "MASON", "BEEKEEPER", "BREWER", "FISHER", "HUNTER", "MEDIC", "COURIER", "GUARD");
         }
         return jobs;
     }

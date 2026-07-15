@@ -6,7 +6,6 @@ import com.example.village.hook.BlueMapHook;
 import com.example.village.hook.WorldEditHook;
 import com.example.village.hook.WorldGuardHook;
 import com.example.village.model.BuildingDefinition;
-import com.example.village.model.BuildingType;
 import com.example.village.model.PendingBlockSelection;
 import com.example.village.model.Village;
 import com.example.village.model.VillageBorder;
@@ -22,6 +21,7 @@ import org.bukkit.block.Sign;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.WallSign;
 import org.bukkit.block.sign.Side;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -68,15 +68,23 @@ public final class BuildingService {
     private final Map<UUID, Scoreboard> originalScoreboards = new java.util.concurrent.ConcurrentHashMap<>();
     // Aktive Konstruktionen: BuildingId -> Task
     private final Map<UUID, ConstructionTask> activeConstructions = new java.util.concurrent.ConcurrentHashMap<>();
+    private AestheticScoreService aestheticScoreService;
+
+    public void setAestheticScoreService(AestheticScoreService aestheticScoreService) {
+        this.aestheticScoreService = aestheticScoreService;
+    }
 
     private BuildingDefinition getDefinition(String typeKey) {
         BuildingConfigLoader loader = plugin.getBuildingConfigLoader();
         return loader != null ? loader.getDefinition(typeKey) : null;
     }
 
-    private BuildingType getLegacyType(String typeKey) {
-        return configManager.getBuildingType(typeKey);
+    private long countCompletedBuildingInstances(Village village, String typeKey) {
+        return village.getBuildings().stream()
+                .filter(b -> b.getTypeKey().equals(typeKey) && b.isCompleted())
+                .count();
     }
+
 
     public boolean isPathBuilding(String typeKey) {
         BuildingDefinition def = getDefinition(typeKey);
@@ -125,9 +133,7 @@ public final class BuildingService {
 
     private String getDisplayName(String typeKey) {
         BuildingDefinition def = getDefinition(typeKey);
-        if (def != null) return def.getName();
-        BuildingType type = getLegacyType(typeKey);
-        return type != null ? type.getDisplayName() : typeKey;
+        return def != null ? def.getName() : typeKey;
     }
 
     public String getDisplayNameForType(String typeKey) {
@@ -136,14 +142,11 @@ public final class BuildingService {
 
     private int getRequiredVillageLevel(String typeKey) {
         BuildingDefinition def = getDefinition(typeKey);
-        if (def != null) return def.getRequiredVillageLevel();
-        BuildingType type = getLegacyType(typeKey);
-        return type != null ? type.getRequiredLevel() : Integer.MAX_VALUE;
+        return def != null ? def.getRequiredVillageLevel() : Integer.MAX_VALUE;
     }
 
     private String getRequiredUpgradeKey(String typeKey) {
-        BuildingType type = getLegacyType(typeKey);
-        return type != null ? type.getRequiredUpgrade() : null;
+        return null;
     }
 
     private String getSchematicName(String typeKey) {
@@ -151,9 +154,6 @@ public final class BuildingService {
         String baseName = null;
         if (def != null && def.getSchematic() != null && !def.getSchematic().isBlank()) {
             baseName = def.getSchematic();
-        } else {
-            BuildingType type = getLegacyType(typeKey);
-            baseName = type != null ? type.getSchematic() : null;
         }
         
         if (baseName == null || baseName.isBlank()) return null;
@@ -188,9 +188,6 @@ public final class BuildingService {
         String baseName = null;
         if (def != null && def.getSchematic() != null && !def.getSchematic().isBlank()) {
             baseName = def.getSchematic();
-        } else {
-            BuildingType type = getLegacyType(typeKey);
-            baseName = type != null ? type.getSchematic() : null;
         }
         
         if (baseName == null || baseName.isBlank()) return variations;
@@ -254,16 +251,12 @@ public final class BuildingService {
 
     private double getGlobalBuildCost(String typeKey) {
         BuildingDefinition def = getDefinition(typeKey);
-        if (def != null) return def.getBuildMoneyGlobal();
-        BuildingType type = getLegacyType(typeKey);
-        return type != null ? type.getGlobalCost() : 0.0;
+        return def != null ? def.getBuildMoneyGlobal() : 0.0;
     }
 
     private double getLocalBuildCost(String typeKey) {
         BuildingDefinition def = getDefinition(typeKey);
-        if (def != null) return def.getBuildMoneyLocal();
-        BuildingType type = getLegacyType(typeKey);
-        return type != null ? type.getLocalCost() : 0.0;
+        return def != null ? def.getBuildMoneyLocal() : 0.0;
     }
 
     public static class SchematicSelection {
@@ -325,7 +318,8 @@ public final class BuildingService {
         BLOCK_CHECK_VALIDATION_FAILED,
         UNKNOWN_TYPE,
         ALREADY_BUILDING,
-        SCHEMATIC_NOT_FOUND
+        SCHEMATIC_NOT_FOUND,
+        TOO_MANY_INSTANCES
     }
 
     // --- Two-step building placement flow ---
@@ -347,6 +341,13 @@ public final class BuildingService {
             int requiredLevel = getRequiredVillageLevel(typeKey);
             if (villageLevel < requiredLevel) {
                 return PlaceResult.LEVEL_TOO_LOW;
+            }
+            // Check max_instances
+            if (def.getMaxInstances() >= 0) {
+                long count = countCompletedBuildingInstances(village, typeKey);
+                if (count >= def.getMaxInstances()) {
+                    return PlaceResult.TOO_MANY_INSTANCES;
+                }
             }
 
             PlaceResult boundaryCheck = validateBlockCheckBoundary(village, def, location);
@@ -379,6 +380,14 @@ public final class BuildingService {
             return PlaceResult.LEVEL_TOO_LOW;
         }
 
+        // Check max_instances
+        if (def != null && def.getMaxInstances() >= 0) {
+            long count = countCompletedBuildingInstances(village, typeKey);
+            if (count >= def.getMaxInstances()) {
+                return PlaceResult.TOO_MANY_INSTANCES;
+            }
+        }
+
         String resolvedDirection = resolvePlacementDirection(player, direction);
         schematicName = getSchematicName(typeKey, schematicName);
         if (schematicName == null || schematicName.isBlank()) {
@@ -406,6 +415,17 @@ public final class BuildingService {
         if (schematicData.getBlocks().isEmpty()) {
             plugin.getLogger().warning("previewBuilding: Schematic ist leer: " + schematicName);
             return PlaceResult.SCHEMATIC_NOT_FOUND;
+        }
+
+        BuildingConfigLoader buildingConfigLoader = plugin.getBuildingConfigLoader();
+        if (buildingConfigLoader != null && buildingConfigLoader.isFoundationStretchEnabled()) {
+            FoundationStretchService.StretchResult stretched = FoundationStretchService.apply(
+                    location.getWorld(),
+                    location,
+                    schematicData,
+                    buildingConfigLoader.getFoundationStretchMaterial(),
+                    buildingConfigLoader.getFoundationStretchMaxDepth());
+            schematicData = stretched.schematicData();
         }
 
         PlaceResult previewCheck = validateBuildingBoundary(village, location, schematicData);
@@ -497,7 +517,6 @@ public final class BuildingService {
         if (expansionNeeded) {
             plugin.getLogger().info("confirmBuilding: Border expansion needed - showing dialog");
             // Show warning and ask for confirmation (clickable)
-            BuildingType type2 = configManager.getBuildingType(pending.getTypeKey());
 
             MessageUtil.sendYesNoRunCommand(
                     player,
@@ -514,7 +533,7 @@ public final class BuildingService {
             // Save expansion state for later confirmation
             BuildingSession tempSession = new BuildingSession(village, tempBuilding, new HashMap<>(), pending.getSchematicData());
             BorderExpansionConfirmation expansionState = new BorderExpansionConfirmation(
-                    village, tempBuilding, tempSession, type2, pending.getLocation(), pending.getSchematicData());
+                    village, tempBuilding, tempSession, pending.getLocation(), pending.getSchematicData());
             borderExpansionConfirmations.put(player.getUniqueId(), expansionState);
             plugin.getLogger().info("confirmBuilding: BorderExpansionConfirmation saved, returning BORDER_EXPANSION_NEEDED");
             
@@ -703,6 +722,14 @@ public final class BuildingService {
         building.setTypeOrdinal(nextOrdinal);
         building.setCompleted(true);
         village.addBuilding(building);
+
+        if (aestheticScoreService != null && def.isBlockCheckBased()) {
+            AestheticScoreService.ScoreBreakdown breakdown =
+                    aestheticScoreService.compute(def, building.getLocation());
+            building.setAestheticScore(breakdown.total());
+            plugin.getLogger().info("Block-Check aesthetic score for " + building.getTypeKey()
+                    + ": " + breakdown.total());
+        }
 
         if (worldGuardHook.isAvailable()) {
             createBlockCheckBuildingRegion(village, building, def);
@@ -1472,6 +1499,12 @@ public final class BuildingService {
         if (building == null) {
             return false;
         }
+        // The village center is the foundation of the village and cannot be demolished
+        if ("dorfzentrum".equals(building.getTypeKey())) {
+            MessageUtil.send(player, configManager.getPrefix(),
+                    "&cDas Dorfzentrum ist das Fundament des Dorfes und kann nicht abgerissen werden.");
+            return false;
+        }
 
         removeSignAt(building.getSignLocation());
         if (worldGuardHook.isAvailable()) {
@@ -1550,8 +1583,7 @@ public final class BuildingService {
         }
 
         BuildingDefinition def = getDefinition(building.getTypeKey());
-        BuildingType type = getLegacyType(building.getTypeKey());
-        int maxLevel = def != null ? def.getMaxUpgradeTier() : (type != null ? type.getMaxLevel() : 1);
+        int maxLevel = def != null ? def.getMaxUpgradeTier() : 1;
         if (building.getLevel() >= maxLevel) {
             return false;
         }
@@ -1562,21 +1594,17 @@ public final class BuildingService {
             BuildingDefinition.UpgradeTier next = def.getUpgradeTier(building.getLevel() + 1);
             if (next == null) return false;
             if (village.getLevel() < next.getRequiredVillageLevel()) return false;
-            if (!player.hasPermission(next.getPermission())) return false;
+            String upgPerm = next.getPermission();
+            if (upgPerm != null && !upgPerm.isBlank()
+                    && !player.hasPermission(upgPerm)
+                    && !player.hasPermission("village.admin")) {
+                MessageUtil.send(player, configManager.getPrefix(),
+                        "&cDir fehlt die Berechtigung für dieses Upgrade.");
+                return false;
+            }
             cost = next.getBuildMoneyGlobal();
             localCost = next.getBuildMoneyLocal();
             pointsCost = 0;
-        } else if (type != null) {
-            if (village.getLevel() < type.getUpgradeRequiredVillageLevel()) {
-                return false;
-            }
-            String unlockKey = type.getUpgradeRequiredUnlockKey();
-            if (unlockKey != null && !unlockKey.isBlank() && village.getUpgradeLevel(unlockKey) <= 0) {
-                return false;
-            }
-            cost = type.getUpgradeCostPerLevel() * (building.getLevel());
-            localCost = type.getUpgradeLocalCostPerLevel() * (building.getLevel());
-            pointsCost = type.getUpgradePointsPerLevel() * (building.getLevel());
         } else {
             return false;
         }
@@ -1605,11 +1633,13 @@ public final class BuildingService {
 
         village.setPoints(village.getPoints() - pointsCost);
         building.setLevel(building.getLevel() + 1);
+        BuildingDefinition.UpgradeTier nextTier = def != null ? def.getUpgradeTier(building.getLevel()) : null;
         // Zuerst speichern – Upgrade ist damit dauerhaft gesichert,
         // unabhängig davon ob der Marker-Update danach fehlschlägt.
         villageManager.saveVillage(village);
         try {
             refreshBuildingProtectionAndMarker(village, building);
+            applyModularExtensionModules(building, nextTier);
             if (def != null && def.isPath()) {
                 PathService pathService = plugin.getPathService();
                 if (pathService != null) {
@@ -1620,8 +1650,86 @@ public final class BuildingService {
             plugin.getLogger().warning("[BuildingService] Marker-Update nach Upgrade fehlgeschlagen " +
                     "(Schematic evtl. nicht vorhanden): " + e.getMessage());
         }
-        executeUpgradeTierEffects(player, village, building, def != null ? def.getUpgradeTier(building.getLevel()) : null);
+        executeUpgradeTierEffects(player, village, building, nextTier);
         return true;
+    }
+
+    private void applyModularExtensionModules(VillageBuilding building, BuildingDefinition.UpgradeTier tier) {
+        if (building == null || tier == null || !worldEditHook.isAvailable()) {
+            return;
+        }
+
+        Object rawExtensions = tier.getChange("modular_extensions", (Object) null);
+        if (!(rawExtensions instanceof ConfigurationSection extensions)) {
+            return;
+        }
+
+        String schematicName = building.getSchematicName();
+        if (schematicName == null || schematicName.isBlank()) {
+            return;
+        }
+
+        File schematicFile = new File(plugin.getDataFolder(), "schematics/" + schematicName);
+        if (!schematicFile.exists()) {
+            return;
+        }
+
+        SchematicMetaLoader.SchematicMeta meta = SchematicMetaLoader.load(schematicFile, null);
+        for (String extensionKey : extensions.getKeys(false)) {
+            ConfigurationSection extension = extensions.getConfigurationSection(extensionKey);
+            if (extension == null) {
+                continue;
+            }
+
+            String attachAt = extension.getString("attach_at");
+            String moduleName = extension.getString("module");
+            if (attachAt == null || attachAt.isBlank() || moduleName == null || moduleName.isBlank()) {
+                continue;
+            }
+
+            String anchorCoordinates = meta.anchor(attachAt);
+            if (anchorCoordinates == null || anchorCoordinates.isBlank()) {
+                continue;
+            }
+
+            int[] anchorOffset = parseAnchorOffset(anchorCoordinates);
+            File moduleFile = new File(plugin.getDataFolder(), "schematics/" + moduleName);
+            if (!moduleFile.exists()) {
+                continue;
+            }
+
+            WorldEditHook.SchematicData moduleData = worldEditHook.loadAndRotateSchematicData(moduleFile, building.getDirection());
+            if (moduleData == null) {
+                continue;
+            }
+
+            for (WorldEditHook.SchematicBlock sb : moduleData.getBlocks()) {
+                Location installLocation = building.getLocation().clone()
+                        .add(anchorOffset[0] + sb.dx(), anchorOffset[1] + sb.dy(), anchorOffset[2] + sb.dz());
+                installLocation.getBlock().setBlockData(sb.blockData(), false);
+            }
+        }
+    }
+
+    private int[] parseAnchorOffset(String anchorCoordinates) {
+        if (anchorCoordinates == null || anchorCoordinates.isBlank()) {
+            return new int[] {0, 0, 0};
+        }
+
+        String[] parts = anchorCoordinates.split(",");
+        if (parts.length < 3) {
+            return new int[] {0, 0, 0};
+        }
+
+        try {
+            return new int[] {
+                Integer.parseInt(parts[0].trim()),
+                Integer.parseInt(parts[1].trim()),
+                Integer.parseInt(parts[2].trim())
+            };
+        } catch (NumberFormatException e) {
+            return new int[] {0, 0, 0};
+        }
     }
 
     private void executeUpgradeTierEffects(Player player, Village village, VillageBuilding building,
@@ -1685,6 +1793,35 @@ public final class BuildingService {
         updateBuildingProtectionAndMarker(village, building, data);
     }
 
+    /**
+     * Finds a free adjacent block near the bell and places the info sign for the village center.
+     * Must be called on the main thread after the village has been saved.
+     */
+    public void initVillageCenterSign(Village village, VillageBuilding centerBuilding) {
+        Location bell = centerBuilding.getLocation();
+        if (bell == null || bell.getWorld() == null) return;
+
+        // Try cardinal neighbours at same Y, then Y+1 fallback
+        int[][] offsets = {{0, 0, -1}, {0, 0, 1}, {1, 0, 0}, {-1, 0, 0}};
+        Location signLoc = null;
+        for (int[] off : offsets) {
+            Location candidate = bell.clone().add(off[0], 0, off[1]);
+            if (candidate.getBlock().isPassable()) {
+                signLoc = candidate;
+                break;
+            }
+        }
+        if (signLoc == null) {
+            signLoc = bell.clone().add(0, 1, -1); // fallback: above-north
+        }
+
+        String displayName = getDisplayName(centerBuilding.getTypeKey());
+        Location placed = placeBuildingInfoSign(signLoc, displayName, "N");
+        centerBuilding.setSignLocation(placed);
+        applyBuildingSignTemplate(null, centerBuilding, configManager);
+        villageManager.saveVillage(village);
+    }
+
     /** Startet einen einfachen Konstruktion-Flow für ein bestehenden, nicht fertigen Gebäude. */
     public boolean startConstruction(Player player, Village village, UUID buildingId) {
         VillageBuilding building = findBuilding(village, buildingId);
@@ -1716,7 +1853,9 @@ public final class BuildingService {
         for (var e : items.entrySet()) removePlayerOrVillageItems(player, village, e.getKey(), e.getValue());
 
         // Task erstellen
-        ConstructionTask task = new ConstructionTask(building, village, player, 20 * 10); // 10s
+        double buildSpeed = computeVillageBuildSpeed(village);
+        int totalTicks = Math.max(20, (int) Math.round((20 * 10) / buildSpeed));
+        ConstructionTask task = new ConstructionTask(building, village, player, totalTicks);
         activeConstructions.put(building.getId(), task);
         task.start();
         MessageUtil.send(player, configManager.getPrefix(), "&aKonstruktion gestartet: &e" + getDisplayName(building.getTypeKey()));
@@ -1807,7 +1946,7 @@ public final class BuildingService {
         }
         // schematicData-Check verhindert NPE in BlueMapHook wenn keine .schem-Datei vorhanden
         if (blueMapHook != null && blueMapHook.isAvailable() && schematicData != null) {
-            blueMapHook.syncBuildingMarker(village, building, getLegacyType(building.getTypeKey()), schematicData);
+            blueMapHook.syncBuildingMarker(village, building, getDisplayName(building.getTypeKey()), schematicData);
         }
     }
 
@@ -1819,25 +1958,73 @@ public final class BuildingService {
         return worldEditHook.loadAndRotateSchematicData(schematicFile, building.getDirection());
     }
 
+    /**
+     * Returns the completed VillageBuilding whose preview-border contains the given (x, z) coordinate,
+     * or null if no such building is found within any village the player belongs to.
+     */
+    public VillageBuilding getBuildingAtLocation(Village village, int x, int z) {
+        if (village == null) return null;
+        for (VillageBuilding building : village.getBuildings()) {
+            if (!building.isCompleted()) continue;
+            VillageBorder border = getPreviewBorderForBuilding(building);
+            if (border != null && (border.contains(x, z) || border.isOnBorder(x, z))) {
+                return building;
+            }
+        }
+        return null;
+    }
+
     public VillageBorder getPreviewBorderForBuilding(VillageBuilding building) {
         if (building == null || building.getLocation() == null) return null;
 
+        // --- Schematic-based buildings ---
         WorldEditHook.SchematicData schematicData = loadSchematicDataForBuilding(building);
-        if (schematicData == null || schematicData.getBlocks().isEmpty()) return null;
+        if (schematicData != null && !schematicData.getBlocks().isEmpty()) {
+            List<int[]> corners = calculateBuildingBoundary(building.getLocation(), schematicData);
+            if (corners.isEmpty()) return null;
+            int minX = corners.get(0)[0] - 1;
+            int maxX = corners.get(2)[0] + 1;
+            int minZ = corners.get(0)[1] - 1;
+            int maxZ = corners.get(2)[1] + 1;
+            return new VillageBorder(List.of(
+                    new int[]{minX, minZ},
+                    new int[]{maxX, minZ},
+                    new int[]{maxX, maxZ},
+                    new int[]{minX, maxZ}
+            ), 0, 256);
+        }
 
-        List<int[]> corners = calculateBuildingBoundary(building.getLocation(), schematicData);
-        if (corners.isEmpty()) return null;
+        // --- Block-check / no-schematic buildings: derive bounds from AreaConfig ---
+        BuildingDefinition def = getDefinition(building.getTypeKey());
+        if (def == null || def.getArea() == null) return null;
 
-        int minX = corners.get(0)[0] - 1;
-        int maxX = corners.get(2)[0] + 1;
-        int minZ = corners.get(0)[1] - 1;
-        int maxZ = corners.get(2)[1] + 1;
+        int ox = building.getLocation().getBlockX();
+        int oz = building.getLocation().getBlockZ();
+        BuildingDefinition.AreaConfig area = def.getArea();
+        int halfW, halfD;
+
+        switch (area.shape()) {
+            case "circle" -> {
+                int r = area.maxRadius() + 1;
+                halfW = r;
+                halfD = r;
+            }
+            case "rectangle" -> {
+                halfW = area.maxWidth() / 2 + 1;
+                halfD = area.maxDepth() / 2 + 1;
+            }
+            default -> {
+                // hollow_structure or unknown: use a generous fallback
+                halfW = 10;
+                halfD = 10;
+            }
+        }
 
         return new VillageBorder(List.of(
-                new int[]{minX, minZ},
-                new int[]{maxX, minZ},
-                new int[]{maxX, maxZ},
-                new int[]{minX, maxZ}
+                new int[]{ox - halfW, oz - halfD},
+                new int[]{ox + halfW, oz - halfD},
+                new int[]{ox + halfW, oz + halfD},
+                new int[]{ox - halfW, oz + halfD}
         ), 0, 256);
     }
 
@@ -2252,6 +2439,15 @@ public final class BuildingService {
 
         if (village.getLevel() < getRequiredVillageLevel(buildingTypeKey)) return PlaceResult.LEVEL_TOO_LOW;
 
+        // Check max_instances limit
+        BuildingDefinition def2 = getDefinition(buildingTypeKey);
+        if (def2 != null && def2.getMaxInstances() >= 0) {
+            long count = countCompletedBuildingInstances(village, buildingTypeKey);
+            if (count >= def2.getMaxInstances()) {
+                return PlaceResult.TOO_MANY_INSTANCES;
+            }
+        }
+
         String requiredUpgrade = getRequiredUpgradeKey(buildingTypeKey);
         if (requiredUpgrade != null && !village.getUpgrades().containsKey(requiredUpgrade)) {
             return PlaceResult.UPGRADE_REQUIRED;
@@ -2561,12 +2757,37 @@ public final class BuildingService {
 
         Location origin = session.getBuilding().getLocation();
         World world = player.getWorld();
+        BuildingDefinition def = getDefinition(session.getBuilding().getTypeKey());
 
-        boolean valid = worldEditHook.validateBuilding(world, origin, session.getSchematic());
+        boolean valid;
+        if (def != null && def.isHybridBased() && session.getSchematicData() != null) {
+            String schematicName = getSchematicName(session.getBuilding().getTypeKey(),
+                    session.getBuilding().getSchematicName());
+            File schematicFile = schematicName != null
+                    ? new File(plugin.getDataFolder(), "schematics/" + schematicName) : null;
+            SchematicMetaLoader.SchematicMeta meta = schematicFile != null
+                    ? SchematicMetaLoader.load(schematicFile, null) : SchematicMetaLoader.SchematicMeta.empty();
+            valid = worldEditHook.validateHybridBuilding(world, origin, session.getSchematicData(), meta);
+        } else {
+            valid = worldEditHook.validateBuilding(world, origin, session.getSchematicData());
+        }
+
         if (valid) {
             completeBuilding(player);
         }
         return valid;
+    }
+
+    private double computeVillageBuildSpeed(Village village) {
+        VillagerNutritionService nutritionService = plugin.getVillagerNutritionService();
+        if (village == null || nutritionService == null) {
+            return 1.0;
+        }
+        double max = 1.0;
+        for (com.example.village.model.CustomVillager villager : village.getVillagers()) {
+            max = Math.max(max, nutritionService.getBuildSpeedMultiplier(villager));
+        }
+        return Math.max(0.1, max);
     }
 
     /** Admin helper: places all preview blocks and marks building completed. */
@@ -2606,6 +2827,13 @@ public final class BuildingService {
 
         session.getBuilding().setCompleted(true);
         session.getBuilding().setSignHidden(false);
+
+        BuildingDefinition def = getDefinition(session.getBuilding().getTypeKey());
+        if (aestheticScoreService != null && def != null && def.isBlockCheckBased()) {
+            AestheticScoreService.ScoreBreakdown breakdown =
+                    aestheticScoreService.compute(def, session.getBuilding().getLocation());
+            session.getBuilding().setAestheticScore(breakdown.total());
+        }
 
         // Update the construction sign to a completed building sign if present
         if (session.getSignLocation() != null) {
@@ -2937,17 +3165,15 @@ public final class BuildingService {
         private final Village village;
         private final VillageBuilding building;
         private final BuildingSession session;
-        private final BuildingType buildingType;
         private final Location buildingLocation;
         private final WorldEditHook.SchematicData schematicData;
 
-        public BorderExpansionConfirmation(Village village, VillageBuilding building, 
-                                           BuildingSession session, BuildingType buildingType,
+        public BorderExpansionConfirmation(Village village, VillageBuilding building,
+                                           BuildingSession session,
                                            Location buildingLocation, WorldEditHook.SchematicData schematicData) {
             this.village = village;
             this.building = building;
             this.session = session;
-            this.buildingType = buildingType;
             this.buildingLocation = buildingLocation;
             this.schematicData = schematicData;
         }
@@ -2955,7 +3181,6 @@ public final class BuildingService {
         public Village getVillage() { return village; }
         public VillageBuilding getBuilding() { return building; }
         public BuildingSession getSession() { return session; }
-        public BuildingType getBuildingType() { return buildingType; }
         public Location getBuildingLocation() { return buildingLocation; }
         public WorldEditHook.SchematicData getSchematicData() { return schematicData; }
     }
@@ -2966,6 +3191,9 @@ public final class BuildingService {
      * Completely removes a building, including blocks and sign.
      */
     public void removeBuildingCompletely(VillageBuilding building) {
+        if ("dorfzentrum".equals(building.getTypeKey())) {
+            return; // Dorfzentrum ist das Fundament des Dorfes und kann nicht abgerissen werden
+        }
         Village village = villageManager.getAllVillages().stream()
                 .filter(v -> v.getBuildings().stream().anyMatch(b -> b.getId().equals(building.getId())))
                 .findFirst().orElse(null);

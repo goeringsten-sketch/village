@@ -1,27 +1,67 @@
-# Village core settings split from config.yml
+# ==============================================================================
+#  Village Plugin - Dorfkern-Konfiguration (village.yml)
+# ==============================================================================
+#  Regelt die Dorfgründung, das Territorium (Grenzsystem), das Level-System
+#  und die gemeinsamen Dorf-Upgrades.
+#
+#  ALLGEMEINE HINWEISE:
+#  - Alle Material-Namen entsprechen dem Minecraft-Bukkit-Enum (GROSSBUCHSTABEN)
+#    → Referenz: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
+#  - Partikel-Namen entsprechen dem Bukkit-Particle-Enum (Kleinbuchstaben möglich)
+#    → Referenz: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Particle.html
+#  - Alle Geldwerte sind Gleitkommazahlen (z.B. 1000.0)
+#  - Permissions werden über eine Permissions-Plugin (z.B. LuckPerms) verwaltet
+# ==============================================================================
 
-# --- Dorfgruendung ---
+
+# ─────────────────────────────────────────────────────────────
+# DORFGRÜNDUNG
+# ─────────────────────────────────────────────────────────────
 founding:
-  # Brunnenstruktur: Wasser -> max Luft -> Glocke
+
+  # Konfiguration für den Dorfbrunnen – er definiert das geografische Zentrum
   well:
+    # Maximale Anzahl Luftblöcke im Brunnen-Bereich.
+    # Der Brunnen wird von oben analysiert (Wasser → Luft → Glocke).
+    # Höhere Werte erlauben flachere oder breitere Brunnendesigns.
     max-air-blocks: 10
-  # Voraussetzungen
+
+  # Voraussetzungen für die Gründung eines neuen Dorfes
   requirements:
+    # Permission, die ein Spieler für die Gründung benötigt.
+    # Muss über das Permissions-Plugin (z.B. LuckPerms) vergeben werden.
     permission: "village.create"
+
+    # Geldkosten zur Gründung
     money:
-      global: 1000.0  # Vault, 0 = deaktiviert
+      # Kosten in der globalen Server-Währung (via Vault). 0.0 = kostenlos.
+      global: 1000.0
+      # Kosten in lokaler Dorfwährung. Bei Gründung typischerweise 0,
+      # da die lokale Währung erst nach Gründung existiert.
       local: 0.0
+
+    # Benötigte Items im Inventar des Spielers.
+    # Jeder Eintrag erfordert 'material' (Bukkit-Material-Name) und 'amount'.
+    # Mehrere Items möglich: Liste beliebig erweitern.
+    # Beispiel für mehrere Items:
+    #   - material: EMERALD
+    #     amount: 1
+    #   - material: OAK_PLANKS
+    #     amount: 64
     items:
       - material: EMERALD
         amount: 1
 
+  # Anforderungen zur Umbenennung eines bestehenden Dorfes
   rename:
     permission: "village.rename"
     money:
       global: 0.0
       local: 0.0
-    items: []
+    items: []  # Leer = keine Items nötig
 
+
+# Voraussetzungen, um einem bestehenden Dorf beizutreten
 joining:
   permission: "village.join"
   money:
@@ -29,37 +69,89 @@ joining:
     local: 0.0
   items: []
 
-# --- Gebietssystem ---
+
+# ─────────────────────────────────────────────────────────────
+# GEBIETSSYSTEM (TERRITORIUM & GRENZEN)
+# ─────────────────────────────────────────────────────────────
 territory:
-  # Maximale horizontale Flaeche in Bloecken^2
+  # Maximale horizontale Fläche des Dorfes in Blöcken (Breite × Länge).
+  # Standardmäßig 10000 = 100×100 Blöcke. Erweiterbar via Upgrade.
   max-area: 10000
-  # Hoehe relativ zur Glocke
+
+  # Vertikaler Schutzbereich nach oben ab der Dorfglocke (in Blöcken).
+  # Angriffe und Blockveränderungen oberhalb dieser Grenze sind nicht geschützt.
   height-above: 64
+
+  # Vertikaler Schutzbereich nach unten ab der Dorfglocke (in Blöcken).
   height-below: 64
-  # Initiales Startgebiet (Quadrat um Brunnen)
-  initial-size: 21  # muss ungerade sein, sonst +1
-  # Grenzvalidierung: Mindestgroesse fuer Quadrat-Check
+
+  # Startgröße des Dorfgebiets als quadratische Kantenlänge um den Dorfbrunnen.
+  # MUSS eine ungerade Zahl sein (z.B. 21, 31, 41) damit der Brunnen exakt zentriert ist.
+  initial-size: 21
+
+  # Mindestgröße für manuell gezogene Grenzen via Koordinaten oder Walk-Modus.
+  # Verhindert zu kleine, unbrauchbare Gebiete.
   min-square-size: 3
-  # Vorschau-Block (clientseitig)
+
+  # ──────────────────────────────────────────
+  # VISUELLE GRENZ-VORSCHAU (Fake-Blöcke)
+  # ──────────────────────────────────────────
+  # Diese Blöcke werden nur visuell (client-seitig) als Vorschau gerendert.
+  # Sie erscheinen kurz und verschwinden nach 'preview-duration' Sekunden.
+  # Alle Werte: Bukkit-Material-Namen (beliebiger Block empfohlen).
+  #
+  # Tipp: Erz-Blöcke sind gut sichtbar und verwechslungssicher.
+
+  # Block für die sichtbare Außengrenze des Dorfgebiets
   preview-block: REDSTONE_ORE
-  # Vorschau-Block für ausgewählte Grenzbereiche beim Vereinen
+
+  # Block für ausgewählte Bereiche bei einer Gebiets-Fusion/Erweiterung
   preview-selected-block: EMERALD_ORE
-  # Vorschau-Block für geplante Gebäudekanten
+
+  # Block für die Grenze eines noch unfertigen / geplanten Gebäudes
   building-preview-border-block: GOLD_ORE
-  # Fertige Gebäudekanten (dargestellt wenn Gebäude im Dorf enthalten sind)
+
+  # Block für die Grenzen fertiggestellter Gebäude im Dorfgebiet
   building-border-block: LAPIS_ORE
-  # Vorschau-Dauer in Sekunden
+
+  # Anzahl Sekunden, die die Vorschau-Fake-Blöcke sichtbar bleiben
   preview-duration: 30
-  # Auswahlmethoden: COORDINATES, WALK, BOTH
+
+  # ──────────────────────────────────────────
+  # GEBIETS-AUSWAHLMETHODE
+  # ──────────────────────────────────────────
+  # Steuert, wie Spieler neue Grenzen für Dorfgebiete definieren können.
+  # Mögliche Werte:
+  #   WALK        - Spieler laufen die Grenze physisch ab (Rechtsklick zum Bestätigen)
+  #   COORDINATES - Eingabe von X/Z-Koordinaten per Chat oder GUI-Klick
+  #   BOTH        - Beide Methoden sind gleichzeitig verfügbar (empfohlen)
   selection-method: BOTH
-  # Debug-Logging fuer Grenzziehung zu Fuss
+
+  # Loggt Debug-Informationen bei der Walk-Grenzziehung in der Server-Konsole.
+  # Nur für Debugging aktivieren – im Live-Betrieb auf false lassen.
   debug-walk-border: false
-  # Debug-Actionbar beim Betreten einer neuen Grenzfläche
+
+  # Zeigt eine Actionbar-Meldung, wenn ein Spieler in eine neue Grenzfläche eintritt.
+  # Nützlich für Tests, im Live-Betrieb störend.
   debug-border-entry: false
 
-# --- Level-System ---
+
+# ─────────────────────────────────────────────────────────────
+# LEVEL-SYSTEM DES DORFES
+# ─────────────────────────────────────────────────────────────
 levels:
+  # Maximal erreichbares Dorflevel (1–unbegrenzt, empfohlen: 10–100)
   max-level: 50
+
+  # ──────────────────────────────────────────
+  # PUNKTE PRO LEVEL
+  # ──────────────────────────────────────────
+  # Gibt an, wie viele Erfahrungspunkte für bestimmte Level-Schwellen benötigt werden.
+  # Das System interpoliert zwischen den Einträgen (d.h. für Level 2–4 gilt
+  # der Wert von Level 1 bis zum nächsten definierten Eintrag).
+  # Tipp: Mindestens Level 1 und max-level eintragen.
+  # Format: - level: <Ziellevel>
+  #           points: <benötigte Punkte für genau dieses Level>
   points-per-level:
     - level: 1
       points: 100
@@ -75,34 +167,50 @@ levels:
       points: 5000
     - level: 50
       points: 10000
-  # Punkte-Quellen
+
+  # ──────────────────────────────────────────
+  # PUNKT-QUELLEN
+  # ──────────────────────────────────────────
+  # Erfahrungspunkte, die das Dorf durch Spieleraktionen erhält.
+  # Wert: Ganzzahl (0 = deaktiviert, negative Werte möglich für Bestrafungen)
   point-sources:
-    block-place: 1
-    block-break: 1
-    mob-kill: 5
-    villager-production: 2
-    building-complete: 50
-    trade: 3
-  
-  # Levelup-Voraussetzungen pro Level
+    block-place: 1            # Platzieren eines Blocks im Dorfgebiet
+    block-break: 1            # Abbauen eines Blocks im Dorfgebiet
+    mob-kill: 5               # Töten von Monstern im Dorfgebiet
+    villager-production: 2    # Dorfbewohner stellt ein Produkt her
+    building-complete: 50     # Fertigstellung eines neuen Gebäudes
+    trade: 3                  # Handel mit einem Dorfbewohner
+
+  # ──────────────────────────────────────────
+  # VORAUSSETZUNGEN FÜR LEVEL-AUFSTIEG
+  # ──────────────────────────────────────────
+  # Definiert, was ein Dorf zusätzlich zu den Punkten erfüllen muss,
+  # um ein bestimmtes Level zu erreichen.
+  #
+  # Verfügbare Felder pro Level-Eintrag:
+  #   min-villagers: <Zahl>      - Mindestanzahl rekrutierter Dorfbewohner
+  #   buildings: [key1, key2]    - Liste von Gebäude-Keys aus buildings.yml,
+  #                                die alle vorhanden sein müssen
+  #   permission: "<node>"       - Permission, die das Dorf/der Besitzer haben muss
+  #   particles: "<typ1> <typ2>" - Partikel-Typen, die bei Levelaufstieg angezeigt werden
+  #                                (Leerzeichen-getrennt; Bukkit Particle-Namen)
+  #
+  # Partikel-Referenz (Auswahl): flame, soul, soul_fire_flame, enchant,
+  #   smoke_normal, cloud, heart, villager_happy, totem_of_undying
   prerequisites:
-    # Level 1: default
     level_1:
       particles: "flame"
-      
-    # Level 5: braucht 5 Bewohner
+
     level_5:
       min-villagers: 5
       particles: "flame flame_small"
-      
-    # Level 10: braucht Marktplatz
+
     level_10:
       buildings:
         - marketplace
       min-villagers: 10
       particles: "flame enchant"
-      
-    # Level 20: weitere Gebäude erforderlich
+
     level_20:
       buildings:
         - barracks
@@ -110,117 +218,201 @@ levels:
         - shop
       min-villagers: 20
       particles: "flame soul"
-      
-    # Level 30: höhere Voraussetzungen
+
     level_30:
       buildings:
         - watchtower
         - factory
       min-villagers: 30
       particles: "flame soul soul_fire_flame"
-      
-    # Level 50: maximales Level
+
     level_50:
       min-villagers: 50
       permission: "village.level.max"
       particles: "soul_fire_flame enchant"
-  
-  # Partikeleffekt-Konfiguration (Blockwise)
+
+  # ──────────────────────────────────────────
+  # PARTIKELEFFEKTE BEI LEVELAUFSTIEG
+  # ──────────────────────────────────────────
+  # Konfiguriert den Partikeleffekt, der bei der Dorfglocke erscheint
+  # wenn das Dorf einen neuen Level erreicht.
   particle-config:
+    # Ob Partikel bei Levelaufstieg angezeigt werden
     enabled: true
+    # Wie oft (in Ticks) geprüft wird, ob ein Levelaufstieg erfolgt ist (20 Ticks = 1s)
     check-interval-ticks: 20
+    # Höhe der Partikel über der Dorfglocke (in Blöcken)
     height-above-bell: 3
+    # Radius der Partikelwolke um die Glocke (in Blöcken)
     radius-around-bell: 3
 
 
-# --- Upgrades ---
+# ─────────────────────────────────────────────────────────────
+# DORF-UPGRADES (Gemeinsame Verbesserungen für das gesamte Dorf)
+# ─────────────────────────────────────────────────────────────
+# Upgrades können von Dorfmitgliedern (je nach Berechtigung) freigeschaltet werden.
+# Jedes Upgrade-Objekt unterstützt folgende Felder:
+#
+#   display-name: "<Farbcode + Name>"    - Anzeigename im GUI (Farbcodes: &a, &e, etc.)
+#   description: "<Text>"               - Kurzbeschreibung im Tooltip
+#   icon: <Material>                    - Icon im Upgrade-Menü (Bukkit-Material-Name)
+#   max-level: <Zahl>                   - Maximale Upgradestufen (1 = einmalig, >1 = stufenweise)
+#   cost-per-level:
+#     global: <Zahl>                    - Kosten pro Stufe in globaler Währung
+#     local: <Zahl>                     - Kosten pro Stufe in lokaler Dorfwährung
+#   points-per-level: <Zahl>            - Dorfpunkte-Kosten pro Stufe
+#   required-village-level: <Zahl>    - (optional) Mindest-Dorflevel für dieses Upgrade
+#   [upgrade-spezifische Felder]        - Werden bei den jeweiligen Upgrades beschrieben
+#
 upgrades:
+
+  # Upgrade: Grenzerweiterung
+  # Vergrößert die maximal nutzbare Dorfgebietsfläche.
   border-expansion:
     display-name: "&aGrenzerweiterung"
     description: "Erweitert die maximale Dorfflaeche"
     icon: MAP
     max-level: 10
+    required-village-level: 2
     cost-per-level:
       global: 500.0
       local: 0.0
     points-per-level: 100
+    # Zusätzliche Fläche in Blöcken², die pro Upgrade-Stufe freigeschaltet wird.
+    # Beispiel: Stufe 1 = +2000 Blöcke², Stufe 2 = +4000 Blöcke², etc.
     area-per-level: 2000
+
+  # Upgrade: Bewohnerkapazität
+  # Erhöht, wie viele Dorfbewohner-NPCs das Dorf gleichzeitig haben kann.
   max-villagers:
     display-name: "&aMax. Dorfbewohner"
     description: "Erhoeht die maximale Anzahl an Dorfbewohnern"
     icon: VILLAGER_SPAWN_EGG
     max-level: 10
+    required-village-level: 3
     cost-per-level:
       global: 300.0
       local: 0.0
     points-per-level: 50
+    # Zusätzliche Dorfbewohner-Slots pro Upgrade-Stufe
     villagers-per-level: 2
+
+  # Upgrade: Produktionsgeschwindigkeit
+  # Beschleunigt die Produktion aller Dorfbewohner gleichzeitig.
   production-speed:
     display-name: "&aProduktionsgeschwindigkeit"
     description: "Beschleunigt die Produktion aller Dorfbewohner"
     icon: CLOCK
     max-level: 5
+    required-village-level: 5
     cost-per-level:
       global: 1000.0
       local: 0.0
     points-per-level: 200
+    # Produktionsgeschwindigkeits-Bonus pro Stufe als Dezimalwert.
+    # 0.1 = +10% pro Stufe. Bei 5 Stufen: maximal +50% Gesamtbonus.
     speed-multiplier-per-level: 0.1
+
+  # Upgrade: Nährstoffspeicher
+  # Vergrößert die Nährstoffkapazität aller Dorfbewohner.
+  # Die Kapazität pro Stufe wird in villagers.yml > nutrition > upgrades definiert.
+  nutrient-capacity:
+    display-name: "&aNaehrstoffspeicher"
+    description: "Erhoht die Naehrstoffkapazitaet aller Dorfbewohner"
+    icon: COOKED_BEEF
+    max-level: 5
+    required-village-level: 4
+    cost-per-level:
+      global: 400.0
+      local: 0.0
+    points-per-level: 80
+
+  # Upgrade: Neue Berufe freischalten
+  # Schaltet höherstufige Berufe für Dorfbewohner frei (abhängig vom required-level
+  # der Berufe in villagers.yml).
   new-professions:
     display-name: "&aNeue Berufe"
     description: "Schaltet neue Berufe fuer Dorfbewohner frei"
     icon: BOOK
     max-level: 5
+    required-village-level: 6
     cost-per-level:
       global: 750.0
       local: 0.0
     points-per-level: 150
+
+  # Upgrade: Steuereinnahmen von Besuchern
+  # Ermöglicht automatische Steuererhebung bei dorffremden Spielern im Dorfgebiet.
   taxes:
     display-name: "&aSteuern & Zoelle"
     description: "Ermoeglicht Steuereinnahmen von Besuchern"
     icon: GOLD_INGOT
     max-level: 3
+    required-village-level: 5
     cost-per-level:
       global: 2000.0
       local: 0.0
     points-per-level: 500
+    # Steuersatz pro Upgrade-Stufe als Dezimalwert.
+    # 0.05 = 5% pro Stufe. Bei 3 Stufen: maximal 15% Steuer.
     tax-rate-per-level: 0.05
+
+  # Upgrade: Neue Gebäude freischalten
+  # Schaltet höherstufige Gebäudetypen aus buildings.yml frei.
   building-unlock:
     display-name: "&aGebaeude freischalten"
     description: "Schaltet neue Gebaeudetypen frei"
     icon: BRICKS
     max-level: 8
+    required-village-level: 4
     cost-per-level:
       global: 600.0
       local: 0.0
     points-per-level: 120
+
+  # Upgrade: Maximale Spieleranzahl im Dorf
+  # Erhöht das Spieler-Mitgliederlimit des Dorfes.
   max-members:
     display-name: "&aMax. Spieler"
     description: "Erhoeht die maximale Spieleranzahl im Dorf"
     icon: PLAYER_HEAD
     max-level: 10
+    required-village-level: 5
     cost-per-level:
       global: 400.0
       local: 0.0
     points-per-level: 80
+    # Zusätzliche Spieler-Slots pro Upgrade-Stufe
     members-per-level: 3
+
+  # Upgrade: Dorfsicherheit & Verteidigung
+  # Verbessert die Verteidigungsanlangen (z.B. Wachen-KI, Mauern).
   defense:
     display-name: "&aVerteidigung"
     description: "Verbessert die Verteidigungsanlagen"
     icon: SHIELD
     max-level: 5
+    required-village-level: 10
     cost-per-level:
       global: 1500.0
       local: 0.0
     points-per-level: 300
+
+  # Upgrade: Wohnhaus-Bettenerweiterung (Spezialupgrade, max-level: 1 = einmalig)
+  # Schaltet Wohnhaus-Upgrades für mehr Schlafplätze frei.
+  # Erfordert zusätzlich lokale Dorfwährung als zweite Kostenschicht.
   house_bed_expansion:
     display-name: "&aWohnhaus-Ausbau"
     description: "Schaltet Wohnhaus-Upgrades fuer mehr Betten frei"
     icon: RED_BED
-    max-level: 1
+    max-level: 1  # Einmaliges Upgrade – kann nicht erneut freigeschaltet werden
     cost-per-level:
       global: 900.0
-      local: 150.0
+      local: 150.0  # Lokale Dorfwährung als Zusatzbedingung
     points-per-level: 120
+
+  # Upgrade: Farm-Kompostierung (Spezialupgrade, max-level: 1 = einmalig)
+  # Schaltet Farm-Upgrades und erweiterte Arbeitsplätze frei.
   farm_composting:
     display-name: "&aFarm-Kompostierung"
     description: "Schaltet Farm-Upgrades und erweiterte Arbeitsplaetze frei"
@@ -230,6 +422,3 @@ upgrades:
       global: 1100.0
       local: 180.0
     points-per-level: 140
-
-
-

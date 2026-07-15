@@ -35,7 +35,8 @@ public final class UpgradeService {
         NOT_ENOUGH_POINTS,
         UNKNOWN_UPGRADE,
         NOT_IN_VILLAGE,
-        NO_PERMISSION
+        NO_PERMISSION,
+        VILLAGE_LEVEL_TOO_LOW
     }
 
     public record RoleUnlock(String key, String displayName, org.bukkit.Material icon, double globalMoneyCost, double localMoneyCost, int pointsCost) {}
@@ -116,6 +117,7 @@ public final class UpgradeService {
 
         int currentLevel = village.getUpgradeLevel(upgradeKey);
         if (currentLevel >= upgradeType.getMaxLevel()) return UpgradeResult.MAX_LEVEL_REACHED;
+        if (village.getLevel() < upgradeType.getRequiredVillageLevel()) return UpgradeResult.VILLAGE_LEVEL_TOO_LOW;
 
         double globalCost = upgradeType.getGlobalCostPerLevel() * (currentLevel + 1);
         double localCost = upgradeType.getLocalCostPerLevel() * (currentLevel + 1);

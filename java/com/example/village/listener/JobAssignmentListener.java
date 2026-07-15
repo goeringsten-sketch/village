@@ -3,19 +3,23 @@ package com.example.village.listener;
 import com.example.village.VillagePlugin;
 import com.example.village.config.VillageConfigManager;
 import com.example.village.model.BuildingDefinition;
-import com.example.village.model.BuildingType;
+
 import com.example.village.model.CustomVillager;
 import com.example.village.model.Village;
 import com.example.village.model.VillageBuilding;
+import com.example.village.model.VillagerJob;
 import com.example.village.model.VillagerProfession;
 import com.example.village.service.VillageManager;
 import com.example.village.service.VillagerService;
 import com.example.village.service.WorkstationMatcher;
 import com.example.village.util.MessageUtil;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -48,9 +52,9 @@ public final class JobAssignmentListener implements Listener {
         this.guiClickListener = guiClickListener;
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getAction() != Action.LEFT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
 
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
@@ -61,6 +65,8 @@ public final class JobAssignmentListener implements Listener {
 
         Block block = event.getClickedBlock();
         if (block == null) return;
+
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && isPassThroughBlock(block.getType())) return;
 
         event.setCancelled(true);
 
@@ -78,13 +84,12 @@ public final class JobAssignmentListener implements Listener {
             Location bLoc = building.getLocation();
             if (bLoc == null || bLoc.getWorld() == null) continue;
             if (!bLoc.getWorld().equals(clickedLoc.getWorld())) continue;
-            BuildingType bt = configManager.getBuildingType(building.getTypeKey());
             BuildingDefinition def = plugin.getBuildingConfigLoader() != null
                     ? plugin.getBuildingConfigLoader().getDefinition(building.getTypeKey())
                     : null;
             if (def == null) continue;
             String wsKey = WorkstationMatcher.resolveWorkstationKey(
-                    building, def, clickedLoc, block.getType(), bt);
+                    plugin, building, def, clickedLoc, block.getType());
             if (wsKey != null) {
                 targetBuilding = building;
                 matchedWorkstationKey = wsKey;
@@ -93,48 +98,21 @@ public final class JobAssignmentListener implements Listener {
         }
 
         if (targetBuilding == null) {
-            MessageUtil.send(player, configManager.getPrefix(),
-                    "&cDieser Block ist kein konfigurierter Arbeitsblock eines Gebaeudes.");
+            MessageUtil.sendClickableCommand(player, configManager.getPrefix(),
+                    configManager.message("villager-job-wrong-block"), "/v abort");
             return;
         }
 
-        // Find the profession that matches this building type
-        BuildingType buildingType = configManager.getBuildingType(targetBuilding.getTypeKey());
         BuildingDefinition definition = plugin.getBuildingConfigLoader() != null
                 ? plugin.getBuildingConfigLoader().getDefinition(targetBuilding.getTypeKey())
                 : null;
 
-        // Find a matching profession for this building type
-        String matchedProfession = null;
-        for (Map.Entry<String, VillagerProfession> entry : configManager.getProfessions().entrySet()) {
-            // Match profession key to building type key (e.g., "farmer" building -> "farmer" profession)
-            if (entry.getKey().equalsIgnoreCase(targetBuilding.getTypeKey())) {
-                matchedProfession = entry.getKey();
-                break;
-            }
-        }
-
-        if (matchedProfession == null) {
-            // Try to find by building type category (e.g., "farm" building -> "farmer" profession)
-            for (Map.Entry<String, VillagerProfession> entry : configManager.getProfessions().entrySet()) {
-                if (targetBuilding.getTypeKey().contains(entry.getKey())
-                        || entry.getKey().contains(targetBuilding.getTypeKey())) {
-                    matchedProfession = entry.getKey();
-                    break;
-                }
-            }
-        }
-
-        if (matchedProfession == null) {
-            // Use first available profession as fallback
-            if (!configManager.getProfessions().isEmpty()) {
-                matchedProfession = configManager.getProfessions().keySet().iterator().next();
-            }
-        }
+        String matchedProfession = resolveProfessionKey(targetBuilding.getTypeKey(), matchedWorkstationKey, definition);
 
         if (matchedProfession == null) {
             MessageUtil.send(player, configManager.getPrefix(),
-                    "&cKein passender Beruf fuer dieses Gebaeude gefunden.");
+                    configManager.text("messages.job-no-match",
+                            "&cKein passender Beruf fuer dieses Gebaeude gefunden."));
             pending.remove(uuid);
             return;
         }
@@ -145,15 +123,54 @@ public final class JobAssignmentListener implements Listener {
         if (success) {
             VillagerProfession profession = configManager.getProfession(matchedProfession);
             String profName = profession != null ? profession.getDisplayName() : matchedProfession;
-            String buildingName = definition != null ? definition.getName()
-                    : (buildingType != null ? buildingType.getDisplayName() : targetBuilding.getTypeKey());
+            String buildingName = definition != null ? definition.getName() : targetBuilding.getTypeKey();
             MessageUtil.send(player, configManager.getPrefix(),
                     "&a" + villager.getName() + " &7arbeitet jetzt als &e" + profName
                             + " &7in &e" + buildingName + "&7 (&f" + matchedWorkstationKey + "&7).");
         } else {
             MessageUtil.send(player, configManager.getPrefix(),
-                    "&cJob konnte nicht zugewiesen werden. Ueberprüfe das Level.");
+                    configManager.text("messages.job-assign-failed",
+                            "&cJob konnte nicht zugewiesen werden. Ueberprüfe das Level."));
         }
+    }
+
+    private String resolveProfessionKey(String buildingTypeKey, String workstationKey, BuildingDefinition definition) {
+        java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
+        addCandidate(candidates, buildingTypeKey);
+        addCandidate(candidates, workstationKey);
+        if (definition != null) {
+            addCandidate(candidates, definition.getId());
+            addCandidate(candidates, definition.getName());
+        }
+
+        for (String candidate : candidates) {
+            for (VillagerJob job : VillagerJob.selectableJobs()) {
+                if (job.matches(candidate) && configManager.getProfession(job.getProfessionKey()) != null) {
+                    return job.getProfessionKey();
+                }
+            }
+        }
+
+        for (String candidate : candidates) {
+            if (configManager.getProfession(candidate) != null) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static void addCandidate(java.util.Set<String> candidates, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        candidates.add(value.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private static boolean isPassThroughBlock(Material material) {
+        return Tag.DOORS.isTagged(material)
+                || Tag.TRAPDOORS.isTagged(material)
+                || Tag.FENCE_GATES.isTagged(material);
     }
 
 }

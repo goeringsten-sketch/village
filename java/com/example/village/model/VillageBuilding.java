@@ -26,6 +26,8 @@ public final class VillageBuilding {
     private String customName;
     /** Stable index per building type within the village (used for WorldGuard region id). */
     private int typeOrdinal;
+    /** Cached aesthetic score for BLOCK_CHECK buildings (-1 = not computed). */
+    private int aestheticScore = -1;
 
     public VillageBuilding(UUID id, String typeKey, Location location) {
         this.id = id;
@@ -94,4 +96,7 @@ public final class VillageBuilding {
 
     public int getTypeOrdinal() { return typeOrdinal; }
     public void setTypeOrdinal(int typeOrdinal) { this.typeOrdinal = Math.max(0, typeOrdinal); }
+    public int getAestheticScore() { return aestheticScore; }
+    public void setAestheticScore(int aestheticScore) { this.aestheticScore = aestheticScore; }
+    public boolean hasAestheticScore() { return aestheticScore >= 0; }
 }

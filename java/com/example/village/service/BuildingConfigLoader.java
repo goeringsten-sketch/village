@@ -14,7 +14,6 @@ import java.util.*;
 
 /**
  * Lädt die 'categories'-Sektion aus config/buildings.yml und erzeugt BuildingDefinition-Objekte.
- * Läuft parallel zum bestehenden VillageConfigManager (der schematic-basierte BuildingTypes lädt).
  */
 public final class BuildingConfigLoader {
 
@@ -42,6 +41,17 @@ public final class BuildingConfigLoader {
     private final Map<String, String> categoryPermissions = new LinkedHashMap<>();
     private final Map<String, CategoryInfo> categories = new LinkedHashMap<>();
 
+    private boolean foundationStretchEnabled = true;
+    private int foundationStretchMaxDepth = 8;
+    private Material foundationStretchMaterial = Material.COBBLESTONE;
+    private boolean aestheticScoringEnabled = true;
+    private int aestheticMinScoreForBonus = 61;
+    private int aestheticPenaltyThreshold = 30;
+    private double aestheticMidBonus = 0.10;
+    private double aestheticHighBonus = 0.20;
+    private double aestheticLowPenalty = 0.20;
+    private final List<List<String>> aestheticMaterialPairs = new ArrayList<>();
+
     public BuildingConfigLoader(VillagePlugin plugin) {
         this.plugin = plugin;
     }
@@ -49,6 +59,7 @@ public final class BuildingConfigLoader {
     public void load() {
         definitions.clear();
         categoryPermissions.clear();
+        aestheticMaterialPairs.clear();
         categories.clear();
 
         File file = new File(plugin.getDataFolder(), "config/buildings.yml");
@@ -68,6 +79,30 @@ public final class BuildingConfigLoader {
             if (cfg == null) {
                 plugin.getLogger().warning("[BuildingConfigLoader] config/buildings.yml fehlt.");
                 return;
+            }
+        }
+
+        ConfigurationSection settings = cfg.getConfigurationSection("settings");
+        if (settings != null) {
+            ConfigurationSection foundation = settings.getConfigurationSection("schematic.foundation-stretch");
+            if (foundation != null) {
+                foundationStretchEnabled = foundation.getBoolean("enabled", true);
+                foundationStretchMaxDepth = foundation.getInt("max-depth", 8);
+                foundationStretchMaterial = mat(foundation.getString("material"), Material.COBBLESTONE);
+            }
+            ConfigurationSection aesthetic = settings.getConfigurationSection("aesthetic_scoring");
+            if (aesthetic != null) {
+                aestheticScoringEnabled = aesthetic.getBoolean("enabled", true);
+                aestheticMinScoreForBonus = aesthetic.getInt("min_score_for_bonus", 61);
+                aestheticPenaltyThreshold = aesthetic.getInt("penalty_threshold", 30);
+                aestheticMidBonus = aesthetic.getDouble("mid_bonus", 0.10);
+                aestheticHighBonus = aesthetic.getDouble("high_bonus", 0.20);
+                aestheticLowPenalty = aesthetic.getDouble("low_penalty", 0.20);
+                for (Object raw : aesthetic.getList("material_pairs", List.of())) {
+                    if (raw instanceof List<?> pair && pair.size() >= 2) {
+                        aestheticMaterialPairs.add(List.of(String.valueOf(pair.get(0)), String.valueOf(pair.get(1))));
+                    }
+                }
             }
         }
 
@@ -120,6 +155,8 @@ public final class BuildingConfigLoader {
             .requiresOutsideAllVillages(s.getBoolean("outpost.requires_outside_all_villages", false));
         // UI flags
         b.showInMenu(s.getBoolean("show_in_menu", true));
+        // Maximale Instanzen pro Dorf (-1 = unbegrenzt)
+        b.maxInstances(s.getInt("max_instances", -1));
 
         // Kind
         BuildingDefinition.BuildingKind kind = switch (s.getString("type", "structure").toLowerCase()) {
@@ -140,6 +177,7 @@ public final class BuildingConfigLoader {
             schematicFile != null ? "schematic" : "block_check").toLowerCase();
         BuildingDefinition.ValidationMode mode = switch (modeStr) {
             case "block_check", "blockcheck" -> BuildingDefinition.ValidationMode.BLOCK_CHECK;
+            case "hybrid" -> BuildingDefinition.ValidationMode.HYBRID;
             default                          -> BuildingDefinition.ValidationMode.SCHEMATIC;
         };
         b.validationMode(mode);
@@ -240,6 +278,9 @@ public final class BuildingConfigLoader {
                 if (!Set.of("name","permission","requires_village_level","build_cost").contains(ck))
                     changes.put(ck, u.get(ck));
             }
+            if (u.getConfigurationSection("modular_extensions") != null) {
+                changes.put("modular_extensions", u.getConfigurationSection("modular_extensions"));
+            }
             b.upgrade(tier, new BuildingDefinition.UpgradeTier(
                 u.getString("name", "Tier " + tier),
                 u.getString("permission", s.getString("permission","") + ".upgrade." + tier),
@@ -315,4 +356,15 @@ public final class BuildingConfigLoader {
         definitions.values().stream().filter(d -> d.getCategoryId().equals(cat)).forEach(r::add);
         return r;
     }
+
+    public boolean isFoundationStretchEnabled() { return foundationStretchEnabled; }
+    public int getFoundationStretchMaxDepth() { return foundationStretchMaxDepth; }
+    public Material getFoundationStretchMaterial() { return foundationStretchMaterial; }
+    public boolean isAestheticScoringEnabled() { return aestheticScoringEnabled; }
+    public int getAestheticMinScoreForBonus() { return aestheticMinScoreForBonus; }
+    public int getAestheticPenaltyThreshold() { return aestheticPenaltyThreshold; }
+    public double getAestheticMidBonus() { return aestheticMidBonus; }
+    public double getAestheticHighBonus() { return aestheticHighBonus; }
+    public double getAestheticLowPenalty() { return aestheticLowPenalty; }
+    public List<List<String>> getAestheticMaterialPairs() { return List.copyOf(aestheticMaterialPairs); }
 }

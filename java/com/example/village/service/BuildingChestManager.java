@@ -186,6 +186,25 @@ public final class BuildingChestManager {
         return true;
     }
 
+    /**
+     * Logistik-Hilfsmethode fuer Kurier/Hauler-Auftraege: versucht die Items in irgendeiner
+     * oeffentlichen, fuer Dorfbewohner zugaenglichen Truhe einzulagern (z.B. Marktplatz, Lager).
+     * Probiert mehrere Gebaeude durch, bis eines genug freie Kapazitaet hat.
+     */
+    public boolean depositToAnyPublicChest(Village village, Map<Material, Integer> items) {
+        if (village == null || items == null || items.isEmpty()) return false;
+        for (VillageBuilding b : village.getBuildings()) {
+            if (!b.isCompleted()) continue;
+            BuildingDefinition def = configLoader.getDefinition(b.getTypeKey());
+            if (def == null || def.getChestConfig() == null) continue;
+            if (!def.getChestConfig().isPublic() || !def.getChestConfig().isVillagerAccessible()) continue;
+            if (deposit(b.getId(), items)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Map<Material, Integer> getCache(UUID buildingId) {
         return Collections.unmodifiableMap(chestCache.getOrDefault(buildingId, Collections.emptyMap()));
     }

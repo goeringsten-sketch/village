@@ -3,7 +3,6 @@ package com.example.village.listener;
 import com.example.village.VillagePlugin;
 import com.example.village.config.VillageConfigManager;
 import com.example.village.hook.VaultHook;
-import com.example.village.model.BuildingType;
 import com.example.village.model.CustomVillager;
 import com.example.village.model.Village;
 import com.example.village.model.VillageBorder;
@@ -74,6 +73,10 @@ public final class ChatInputListener implements Listener {
         this.villagerManager = villagerManager;
     }
 
+    private String t(String path, String fallback) {
+        return configManager.text(path, fallback);
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
@@ -103,7 +106,7 @@ public final class ChatInputListener implements Listener {
                     }
                 });
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&eGrenzsetzung abgebrochen.");
+                        t("messages.border-cancelled", "&eGrenzsetzung abgebrochen."));
                 return;
             }
 
@@ -112,11 +115,11 @@ public final class ChatInputListener implements Listener {
                     if (borderService.hasPendingBorderActionConfirmation(uuid)) {
                         BorderService.PendingBorderActionConfirmation confirmation =
                                 borderService.removePendingBorderActionConfirmation(uuid);
-                        if (confirmation == null) {
-                            MessageUtil.send(player, configManager.getPrefix(),
-                                    "&cKeine ausstehende Grenzsetzung gefunden.");
-                            return;
-                        }
+                            if (confirmation == null) {
+                                MessageUtil.send(player, configManager.getPrefix(),
+                                    t("messages.border-no-pending", "&cKeine ausstehende Grenzsetzung gefunden."));
+                                return;
+                            }
                         Village village = confirmation.getVillage();
                         if (confirmation.getTargetBorderId() != null) {
                             int targetId = confirmation.getTargetBorderId();
@@ -137,7 +140,7 @@ public final class ChatInputListener implements Listener {
                             borderService.removePendingBorderConfirmation(uuid);
                     if (confirmation == null) {
                         MessageUtil.send(player, configManager.getPrefix(),
-                                "&cKeine ausstehende Grenzsetzung gefunden.");
+                                t("messages.border-no-pending", "&cKeine ausstehende Grenzsetzung gefunden."));
                         return;
                     }
                     confirmation.getVillage().addBorder(confirmation.getBorder());
@@ -149,7 +152,7 @@ public final class ChatInputListener implements Listener {
             }
 
             // Invalid input - remind player
-            MessageUtil.send(player, null, "&7Bitte klicke &a[JA] &7oder &c[NEIN]&7 (oder schreibe: ja / nein).");
+            MessageUtil.send(player, null, t("messages.confirmation-reminder", "&7Bitte klicke &a[JA] &7oder &c[NEIN]&7 (oder schreibe: ja / nein)."));
             return;
         }
 
@@ -162,13 +165,13 @@ public final class ChatInputListener implements Listener {
 
                 if (message.equalsIgnoreCase("cancel") || message.equalsIgnoreCase("abbrechen")) {
                     pendingVillagerRenames.remove(uuid);
-                    MessageUtil.send(player, configManager.getPrefix(), "&eUmbenennung abgebrochen.");
+                    MessageUtil.send(player, configManager.getPrefix(), t("messages.rename-cancelled", "&eUmbenennung abgebrochen."));
                     return;
                 }
 
                 if (message.length() < 2 || message.length() > 20) {
                     MessageUtil.send(player, configManager.getPrefix(),
-                            "&cDer Name muss zwischen 2 und 20 Zeichen lang sein!");
+                            t("messages.name-length-2-20", "&cDer Name muss zwischen 2 und 20 Zeichen lang sein!"));
                     return;
                 }
 
@@ -177,7 +180,7 @@ public final class ChatInputListener implements Listener {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     CustomVillager villager = villagerManager.getVillager(villagerId);
                     if (villager == null) {
-                        MessageUtil.send(player, configManager.getPrefix(), "&cVillager nicht gefunden.");
+                        MessageUtil.send(player, configManager.getPrefix(), t("messages.villager-not-found", "&cVillager nicht gefunden."));
                         return;
                     }
                     String oldName = villager.getName();
@@ -188,7 +191,8 @@ public final class ChatInputListener implements Listener {
                                 .ifPresent(villageManager::saveVillage);
                     }
                     MessageUtil.send(player, configManager.getPrefix(),
-                            "&aVillager umbenannt: &e" + oldName + " &a-> &e" + newVillagerName);
+                            t("messages.villager-renamed", "&aVillager umbenannt: &e%old% &a-> &e%new%")
+                                    .replace("%old%", oldName).replace("%new%", newVillagerName));
                 });
                 return;
             }
@@ -200,13 +204,13 @@ public final class ChatInputListener implements Listener {
             UUID buildingId = pendingBuildingRenames.remove(uuid);
 
             if (message.equalsIgnoreCase("cancel") || message.equalsIgnoreCase("abbrechen")) {
-                MessageUtil.send(player, configManager.getPrefix(), "&eUmbenennung abgebrochen.");
+                MessageUtil.send(player, configManager.getPrefix(), t("messages.rename-cancelled", "&eUmbenennung abgebrochen."));
                 return;
             }
 
             if (message.length() < 3 || message.length() > 32) {
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&cDer Name muss zwischen 3 und 32 Zeichen lang sein! Versuche es erneut.");
+                        t("messages.name-length-3-32", "&cDer Name muss zwischen 3 und 32 Zeichen lang sein! Versuche es erneut."));
                 return;
             }
 
@@ -216,21 +220,21 @@ public final class ChatInputListener implements Listener {
                         .filter(v -> v.getBuildings().stream().anyMatch(b -> b.getId().equals(buildingId)))
                         .findFirst().orElse(null);
                 if (village == null) {
-                    MessageUtil.send(player, configManager.getPrefix(), "&cGebäude nicht gefunden.");
+                    MessageUtil.send(player, configManager.getPrefix(), t("messages.building-not-found", "&cGebäude nicht gefunden."));
                     return;
                 }
                 VillageBuilding building = village.getBuildings().stream()
                         .filter(b -> buildingId.equals(b.getId()))
                         .findFirst().orElse(null);
                 if (building == null) {
-                    MessageUtil.send(player, configManager.getPrefix(), "&cGebäude nicht gefunden.");
+                    MessageUtil.send(player, configManager.getPrefix(), t("messages.building-not-found", "&cGebäude nicht gefunden."));
                     return;
                 }
                 building.setCustomName(newName);
                 villageManager.saveVillage(village);
                 plugin.getDebugConfigManager().debug("building", "Renamed building " + buildingId + " to '" + newName + "' for " + player.getName());
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&aGebäude umbenannt: &e" + building.getCustomName());
+                        t("messages.building-renamed", "&aGebäude umbenannt: &e%name%").replace("%name%", building.getCustomName()));
                 guiClickListener.getGuiManager().openBuildingDetailGui(player, village, buildingId);
             });
             return;
@@ -242,7 +246,7 @@ public final class ChatInputListener implements Listener {
             pendingBuildingSearches.remove(uuid);
 
             if (message.equalsIgnoreCase("cancel") || message.equalsIgnoreCase("abbrechen")) {
-                MessageUtil.send(player, configManager.getPrefix(), "&eSuche abgebrochen.");
+                MessageUtil.send(player, configManager.getPrefix(), t("messages.search-cancelled", "&eSuche abgebrochen."));
                 return;
             }
 
@@ -252,7 +256,7 @@ public final class ChatInputListener implements Listener {
                 guiClickListener.getGuiManager().setBuildingSearchQuery(player, query);
                 Village playerVillage = villageManager.getPlayerVillage(player.getUniqueId()).orElse(null);
                 if (playerVillage == null) {
-                    MessageUtil.send(player, configManager.getPrefix(), "&cKein Dorf gefunden.");
+                    MessageUtil.send(player, configManager.getPrefix(), t("messages.village-not-found", "&cKein Dorf gefunden."));
                     return;
                 }
                 guiClickListener.getGuiManager().openBuildingManageGui(player, playerVillage);
@@ -268,19 +272,19 @@ public final class ChatInputListener implements Listener {
 
             if (message.equalsIgnoreCase("cancel") || message.equalsIgnoreCase("abbrechen")) {
                 pendingRenames.remove(uuid);
-                MessageUtil.send(player, configManager.getPrefix(), "&eUmbenennung abgebrochen.");
+                MessageUtil.send(player, configManager.getPrefix(), t("messages.rename-cancelled", "&eUmbenennung abgebrochen."));
                 return;
             }
 
             if (message.length() < 3 || message.length() > 24) {
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&cDer Name muss zwischen 3 und 24 Zeichen lang sein! Versuche es erneut.");
+                        t("messages.name-length-3-24", "&cDer Name muss zwischen 3 und 24 Zeichen lang sein! Versuche es erneut."));
                 return;
             }
 
             if (villageManager.getVillageByName(message).isPresent()) {
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&cEin Dorf mit diesem Namen existiert bereits! Versuche es erneut.");
+                        t("messages.village-name-exists", "&cEin Dorf mit diesem Namen existiert bereits! Versuche es erneut."));
                 return;
             }
 
@@ -290,14 +294,14 @@ public final class ChatInputListener implements Listener {
                 Village village = villageManager.getVillage(villageId).orElse(null);
                 if (village == null) {
                     MessageUtil.send(player, configManager.getPrefix(),
-                            "&cDorf nicht gefunden.");
+                            t("messages.village-not-found", "&cDorf nicht gefunden."));
                     return;
                 }
                 String oldName = village.getName();
                 village.setName(newName);
                 villageManager.saveVillage(village);
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&aDorf umbenannt: &e" + oldName + " &a-> &e" + newName);
+                        t("messages.village-renamed", "&aDorf umbenannt: &e%old% &a-> &e%new%").replace("%old%", oldName).replace("%new%", newName));
             });
             return;
         }
@@ -309,20 +313,20 @@ public final class ChatInputListener implements Listener {
             Location bellLoc = pendingFoundings.remove(uuid);
 
             if (message.equalsIgnoreCase("cancel") || message.equalsIgnoreCase("abbrechen")) {
-                MessageUtil.send(player, configManager.getPrefix(), "&eDorfgruendung abgebrochen.");
+                MessageUtil.send(player, configManager.getPrefix(), t("messages.founding-cancelled", "&eDorfgruendung abgebrochen."));
                 return;
             }
 
             // Validate name
             if (message.length() < 3 || message.length() > 24) {
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&cDer Name muss zwischen 3 und 24 Zeichen lang sein!");
+                        t("messages.name-length-3-24", "&cDer Name muss zwischen 3 und 24 Zeichen lang sein!"));
                 return;
             }
 
             if (villageManager.getVillageByName(message).isPresent()) {
                 MessageUtil.send(player, configManager.getPrefix(),
-                        "&cEin Dorf mit diesem Namen existiert bereits!");
+                        t("messages.village-name-exists", "&cEin Dorf mit diesem Namen existiert bereits!"));
                 return;
             }
 
@@ -330,10 +334,19 @@ public final class ChatInputListener implements Listener {
             final String villageName = message;
             final Location finalBellLoc = bellLoc;
             Bukkit.getScheduler().runTask(plugin, () -> {
+                // Re-verify requirements right before creation
+                if (!guiClickListener.checkFoundingRequirements(player)) {
+                    return;
+                }
+
                 // Deduct costs
                 double globalCost = configManager.getFoundingGlobalCost();
                 if (globalCost > 0 && vaultHook.isAvailable()) {
-                    vaultHook.withdraw(player, globalCost);
+                    if (!vaultHook.withdraw(player, globalCost)) {
+                        MessageUtil.send(player, configManager.getPrefix(),
+                                configManager.message("upgrade-too-expensive"));
+                        return;
+                    }
                 }
                 double localCost = configManager.getFoundingLocalCost();
                 if (localCost > 0) {
@@ -375,6 +388,12 @@ public final class ChatInputListener implements Listener {
                 if (currencyIntegrationManager != null) {
                     currencyIntegrationManager.onVillageCreated(village);
                 }
+
+                // Place info sign for the village center (Dorfzentrum)
+                village.getBuildings().stream()
+                        .filter(b -> "dorfzentrum".equals(b.getTypeKey()))
+                        .findFirst()
+                        .ifPresent(center -> buildingService.initVillageCenterSign(village, center));
 
                 // Show border preview
                 previewService.showPreview(player, village.getBorder(), player.getWorld());

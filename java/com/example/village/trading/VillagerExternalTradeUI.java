@@ -191,8 +191,20 @@ public class VillagerExternalTradeUI implements TradingUI {
             return false;
         }
         
-        // Prüfe ob es nicht der Villager selbst oder aus gleichem Dorf ist
-        // TODO: Dorf-Membershif prüfen
+        // Prüfe ob der Käufer aus dem gleichen Dorf ist (externe Spieler dürfen nicht Mitglieder sein)
+        try {
+            com.example.village.VillagePlugin plugin = org.bukkit.plugin.java.JavaPlugin.getPlugin(com.example.village.VillagePlugin.class);
+            if (plugin.getVillageManager() != null) {
+                com.example.village.model.Village village = plugin.getVillageManager()
+                        .getVillage(UUID.fromString(villageUUID)).orElse(null);
+                if (village != null && village.isMember(buyer.getUniqueId())) {
+                    result.addError("Dorfmitglieder müssen die lokale Währung nutzen.");
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            // Ignore / fallback
+        }
         
         return true;
     }

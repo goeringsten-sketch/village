@@ -48,7 +48,20 @@ public final class BorderPreviewService {
         BlockData buildingFinishedData = buildingFinishedMaterial.createBlockData();
         java.util.List<Location> shownBlocks = new java.util.ArrayList<>();
 
+        // Always render the explicitly requested border (e.g. a newly selected coord border
+        // that has not yet been added to the village).
         renderBorderBlocks(player, world, previewData, border, shownBlocks);
+        // Additionally render all existing village borders so inner borders (e.g. dorfbrunnen
+        // inside an outer expansion) stay visible regardless of sub-area position.
+        var villageOpt = plugin.getVillageManager().getPlayerVillage(player.getUniqueId());
+        if (villageOpt.isPresent()) {
+            for (VillageBorder b : villageOpt.get().getBorders()) {
+                // Skip if same object to avoid sending duplicate block-change packets
+                if (b != border) {
+                    renderBorderBlocks(player, world, previewData, b, shownBlocks);
+                }
+            }
+        }
         activePreviewBlocks.put(player.getUniqueId(), shownBlocks);
 
         java.util.List<Location> buildingShownBlocks = new java.util.ArrayList<>();
